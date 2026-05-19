@@ -1,0 +1,704 @@
+from http import HTTPStatus
+from ipaddress import ip_address
+from urllib.parse import urlencode, urlsplit
+
+from flask import (
+  Blueprint,
+  Response,
+  current_app,
+  jsonify,
+  make_response,
+  redirect,
+  render_template,
+  request,
+)
+
+from .captcha.altcha import create_challenge as create_altcha_challenge
+from .captcha.altcha import verify_request as verify_altcha_request
+from .captcha.cap import CapVerificationResult
+from .captcha.cap import verify_token as verify_cap_token
+from .captcha.dummy import verify_request as verify_dummy_request
+from .captcha.hcaptcha import verify_request as verify_hcaptcha_request
+from .config import normalize_host_name
+from .cookies import issue_token_for_client, verify_token_for_client
+from .i18n import get_translations
+from .ratelimit import RateLimitRule
+from .security import normalize_return_path
+
+gatekeeper = Blueprint(
+  "gatekeeper", __name__, static_folder="static", static_url_path="/static"
+)
+
+
+@gatekeeper.get("/check")
+def check() -> tuple[str, int] | Response:
+  """Validate the signed cookie for nginx auth_request subrequests."""
+  settings = _settings()
+  original_uri = _original_request_uri()
+  if _skip_auth_route_matches(settings):
+    current_app.logger.info(
+      "Bypassing auth for configured skip route",
+      extra={
+        "request_method": _original_request_method(),
+        "request_path": _original_request_path(),
+      },
+    )
+    return "", HTTPStatus.NO_CONTENT
+
+  token = request.cookies.get(settings.cookie_name)
+  payload = verify_token_for_client(
+    settings.secret_key,
+    token,
+    client_binding=_client_binding_value(settings.cookie_binding_mode),
+  )
+  return_path = normalize_return_path(
+    original_uri,
+    settings.blocked_return_prefixes,
+    settings.max_return_path_length,
+  )
+
+  if payload is not None:
+    return "", HTTPStatus.NO_CONTENT
+
+  # nginx reads this header and converts the 401 into a redirect to /gatekeeper/challenge.
+  response = make_response("", HTTPStatus.UNAUTHORIZED)
+  response.headers["X-Auth-Redirect"] = _gatekeeper_url(
+    settings, "/challenge", return_path=return_path
+  )
+  current_app.logger.info(
+    "Access denied, redirecting to challenge", extra={"return_path": return_path}
+  )
+  return response
+
+
+@gatekeeper.get("/challenge")
+def challenge() -> Response:
+  """Render the interstitial page that triggers the active verification provider."""
+  settings = _settings()
+  return_path = normalize_return_path(
+    request.args.get("return"),
+    settings.blocked_return_prefixes,
+    settings.max_return_path_length,
+  )
+
+  secure_transport_response = _enforce_secure_transport(return_path)
+  if secure_transport_response is not None:
+    return secure_transport_response
+
+  rate_limit_response = _rate_limit_response("challenge", return_path)
+  if rate_limit_response is not None:
+    return rate_limit_response
+
+  return _render_challenge(return_path)
+
+
+@gatekeeper.post("/verify")
+def verify() -> Response:
+  """Complete the active provider verification and issue the signed human cookie."""
+  settings = _settings()
+  return_path = normalize_return_path(
+    request.form.get("return"),
+    settings.blocked_return_prefixes,
+    settings.max_return_path_length,
+  )
+
+  secure_transport_response = _enforce_secure_transport(return_path)
+  if secure_transport_response is not None:
+    return secure_transport_response
+
+  rate_limit_response = _rate_limit_response("verify", return_path)
+  if rate_limit_response is not None:
+    return rate_limit_response
+
+  verification_result = _verification_result(settings)
+  if not verification_result.success:
+    error_key = verification_result.error_key or (
+      "error_unavailable" if verification_result.retryable else "error_failed"
+    )
+    status_code = verification_result.status_code
+    if status_code == HTTPStatus.OK:
+      status_code = (
+        HTTPStatus.BAD_GATEWAY
+        if verification_result.retryable
+        else HTTPStatus.FORBIDDEN
+      )
+
+    current_app.logger.warning(
+      "%s verification failed",
+      settings.verification_mode.upper(),
+      extra={
+        "retryable": verification_result.retryable,
+        "verification_payload": verification_result.payload or {},
+      },
+    )
+    return _render_challenge(
+      return_path,
+      error_key=error_key,
+      status_code=status_code,
+    )
+
+  token = issue_token_for_client(
+    settings.secret_key,
+    settings.cookie_ttl_seconds,
+    client_binding=_client_binding_value(settings.cookie_binding_mode),
+  )
+  response = redirect(return_path, code=HTTPStatus.FOUND)
+  _set_verification_cookie(response, settings, token)
+  response.headers["Cache-Control"] = "no-store"
+  log_message = {
+    "cap": "Cap verification completed",
+    "hcaptcha": "hCaptcha verification completed",
+    "altcha": "ALTCHA verification completed",
+  }.get(settings.verification_mode, "Dummy verification completed")
+  current_app.logger.info(log_message, extra={"return_path": return_path})
+  return response
+
+
+@gatekeeper.get("/altcha/challenge")
+def altcha_challenge() -> Response:
+  """Return one fresh ALTCHA challenge when ALTCHA mode is active for the host."""
+  settings = _settings()
+  if not settings.altcha_enabled:
+    response = jsonify({"error": "ALTCHA mode is not active for this host."})
+    response.status_code = HTTPStatus.NOT_FOUND
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+  return_path = normalize_return_path(
+    request.args.get("return"),
+    settings.blocked_return_prefixes,
+    settings.max_return_path_length,
+  )
+
+  secure_transport_response = _enforce_secure_transport(return_path)
+  if secure_transport_response is not None:
+    return _json_error_response(
+      {"error": "Verification is only available over HTTPS on non-local hosts."},
+      HTTPStatus.BAD_REQUEST,
+    )
+
+  decision = _rate_limit_decision("challenge")
+  if decision is not None:
+    return _json_error_response(
+      {"error": "Too many verification attempts. Please wait and try again."},
+      HTTPStatus.TOO_MANY_REQUESTS,
+      retry_after_seconds=decision.retry_after_seconds,
+    )
+
+  response = jsonify(create_altcha_challenge(settings))
+  response.status_code = HTTPStatus.OK
+  response.headers["Cache-Control"] = "no-store"
+  return response
+
+
+@gatekeeper.get("/clear")
+def clear() -> Response:
+  """Clear the signed human-verification cookie and redirect to a safe local path."""
+  settings = _settings()
+  return_path = normalize_return_path(
+    request.args.get("return"),
+    settings.blocked_return_prefixes,
+    settings.max_return_path_length,
+  )
+
+  response = redirect(return_path, code=HTTPStatus.FOUND)
+  _clear_verification_cookie(response, settings)
+  response.headers["Cache-Control"] = "no-store"
+  current_app.logger.info(
+    "Cleared verification cookie", extra={"return_path": return_path}
+  )
+  return response
+
+
+@gatekeeper.get("/healthz")
+def healthz() -> tuple[str, int]:
+  """Return a minimal liveness response for container and proxy health checks."""
+  return "ok", HTTPStatus.OK
+
+
+def _render_challenge(
+  return_path: str,
+  error_key: str | None = None,
+  status_code: int = HTTPStatus.OK,
+  rate_limited: bool = False,
+  retry_after_seconds: int | None = None,
+) -> Response:
+  """Render the challenge template with no-store and clickjacking protection headers."""
+  settings = _settings()
+  language_code, translations = get_translations(request.accept_languages)
+  challenge_context = _challenge_template_context(settings)
+  client_translation_keys = challenge_context["client_translation_keys"]
+  client_translations = {key: translations[key] for key in client_translation_keys}
+  response = make_response(
+    render_template(
+      "challenge.html",
+      language_code=language_code,
+      translations=translations,
+      client_translations=client_translations,
+      footer_html=settings.footer_html.resolve(language_code),
+      return_path=return_path,
+      error_message=translations.get(error_key) if error_key else None,
+      auto_start=not error_key and not rate_limited,
+      rate_limited=rate_limited,
+      verification_mode=settings.verification_mode,
+      verify_action_url=_gatekeeper_path(settings, "/verify"),
+      challenge_shared_script_url=_gatekeeper_path(
+        settings, "/static/challenge-common.js"
+      ),
+      challenge_runtime_script_url=challenge_context["runtime_script_url"],
+      provider_external_scripts=challenge_context["external_scripts"],
+      provider_options=challenge_context["provider_options"],
+      provider_template=challenge_context["provider_template"],
+      initial_status_text=translations[challenge_context["initial_status_key"]],
+    ),
+    status_code,
+  )
+  # Challenge responses should never be cached because they carry per-request return targets.
+  response.headers["Cache-Control"] = "no-store"
+  response.headers["Pragma"] = "no-cache"
+  response.headers["Referrer-Policy"] = "same-origin"
+  response.headers["X-Content-Type-Options"] = "nosniff"
+  response.headers["X-Frame-Options"] = "DENY"
+  response.headers["Content-Security-Policy"] = _content_security_policy(settings)
+  if retry_after_seconds is not None:
+    response.headers["Retry-After"] = str(retry_after_seconds)
+  return response
+
+
+def _set_verification_cookie(response: Response, settings: object, token: str) -> None:
+  """Write the signed verification cookie using the shared browser attributes."""
+  # The cookie is the only verification state; no server-side session is stored.
+  response.set_cookie(
+    settings.cookie_name,
+    token,
+    max_age=settings.cookie_ttl_seconds,
+    httponly=True,
+    secure=settings.cookie_secure,
+    samesite="Lax",
+    path="/",
+  )
+
+
+def _clear_verification_cookie(response: Response, settings: object) -> None:
+  """Expire the verification cookie with the same browser attributes used at issue time."""
+  response.delete_cookie(
+    settings.cookie_name,
+    httponly=True,
+    secure=settings.cookie_secure,
+    samesite="Lax",
+    path="/",
+  )
+
+
+def _rate_limit_response(scope: str, return_path: str) -> Response | None:
+  """Best-effort in-process abuse throttling for challenge and verify endpoints."""
+  decision = _rate_limit_decision(scope)
+  if decision is None:
+    return None
+
+  return _render_challenge(
+    return_path,
+    error_key="error_rate_limited",
+    status_code=HTTPStatus.TOO_MANY_REQUESTS,
+    rate_limited=True,
+    retry_after_seconds=decision.retry_after_seconds,
+  )
+
+
+def _rate_limit_decision(scope: str) -> object | None:
+  """Return the limiter decision for one public endpoint when a client is blocked."""
+  settings = _settings()
+  rate_limiter = current_app.extensions["gatekeeper_rate_limiter"]
+  decision = rate_limiter.check(
+    f"{scope}:{_request_host_name() or 'default'}:{_rate_limit_client_key()}",
+    _rate_limit_rule(scope, settings),
+  )
+  if decision.allowed:
+    return None
+
+  current_app.logger.warning(
+    "Rate limit exceeded",
+    extra={
+      "scope": scope,
+      "client_ip": _client_ip_value(),
+      "retry_after_seconds": decision.retry_after_seconds,
+    },
+  )
+  return decision
+
+
+def _rate_limit_rule(scope: str, settings: object) -> RateLimitRule:
+  """Return the configured rate-limit policy for the requested public endpoint."""
+  if scope == "challenge":
+    return RateLimitRule(
+      max_requests=settings.challenge_rate_limit_requests,
+      window_seconds=settings.challenge_rate_limit_window_seconds,
+      block_seconds=settings.challenge_rate_limit_block_seconds,
+    )
+
+  return RateLimitRule(
+    max_requests=settings.verify_rate_limit_requests,
+    window_seconds=settings.verify_rate_limit_window_seconds,
+    block_seconds=settings.verify_rate_limit_block_seconds,
+  )
+
+
+def _rate_limit_client_key() -> str:
+  """Group abusive traffic by sanitized client IP, then fall back to User-Agent."""
+  client_ip = _client_ip_value()
+  if client_ip:
+    return client_ip
+  return f"ua={_normalized_user_agent(request.headers.get('User-Agent')) or 'unknown'}"
+
+
+def _enforce_secure_transport(return_path: str) -> Response | None:
+  """Reject non-local verification flows that are not protected by HTTPS cookies."""
+  settings = _settings()
+
+  if settings.cookie_secure and request.is_secure:
+    return None
+
+  if settings.cookie_secure:
+    current_app.logger.warning(
+      "Rejected verification flow over insecure transport",
+      extra={"request_host": request.host, "return_path": return_path},
+    )
+    return _render_challenge(
+      return_path,
+      error_key="error_insecure_transport",
+      status_code=HTTPStatus.BAD_REQUEST,
+    )
+
+  if _is_local_request_host():
+    return None
+
+  current_app.logger.warning(
+    "Rejected non-local verification flow without secure cookies",
+    extra={"request_host": request.host, "return_path": return_path},
+  )
+  return _render_challenge(
+    return_path,
+    error_key="error_insecure_transport",
+    status_code=HTTPStatus.BAD_REQUEST,
+  )
+
+
+def _content_security_policy(settings: object) -> str:
+  """Allow only the local challenge script plus the configured Cap origins."""
+  script_sources = ["'self'"]
+  script_element_sources = ["'self'"]
+  style_sources = ["'self'", "'unsafe-inline'"]
+  connect_sources = ["'self'"]
+  worker_sources = ["'self'"]
+  frame_sources: list[str] = []
+
+  if settings.cap_enabled:
+    script_sources.extend(["'unsafe-eval'", "'wasm-unsafe-eval'"])
+    script_sources = _sources_with_origin(script_sources, settings.cap_asset_base_url)
+    script_element_sources = _sources_with_origin(
+      script_element_sources,
+      settings.cap_asset_base_url,
+    )
+    script_element_sources.append("'unsafe-inline'")
+    connect_sources = _sources_with_origin(
+      connect_sources,
+      settings.cap_public_base_url,
+      settings.cap_asset_base_url,
+    )
+    worker_sources.append("blob:")
+
+  if settings.hcaptcha_enabled:
+    hcaptcha_sources = ("https://hcaptcha.com", "https://*.hcaptcha.com")
+    script_sources.extend(hcaptcha_sources)
+    script_element_sources.extend(hcaptcha_sources)
+    style_sources.extend(hcaptcha_sources)
+    connect_sources.extend(hcaptcha_sources)
+    frame_sources.extend(hcaptcha_sources)
+
+  if settings.altcha_enabled:
+    script_sources = _sources_with_origin(script_sources, settings.altcha_script_url)
+    script_element_sources = _sources_with_origin(
+      script_element_sources,
+      settings.altcha_effective_script_url,
+    )
+    worker_sources.append("blob:")
+
+  directives = (
+    ("default-src", ["'self'"]),
+    ("base-uri", ["'none'"]),
+    ("frame-ancestors", ["'none'"]),
+    ("frame-src", _dedupe(frame_sources or ["'self'"])),
+    ("form-action", ["'self'"]),
+    ("object-src", ["'none'"]),
+    ("script-src", _dedupe(script_sources)),
+    ("script-src-elem", _dedupe(script_element_sources)),
+    ("script-src-attr", ["'none'"]),
+    ("style-src", _dedupe(style_sources)),
+    ("img-src", ["'self'", "data:"]),
+    ("font-src", ["'self'", "data:"]),
+    ("connect-src", _dedupe(connect_sources)),
+    ("worker-src", _dedupe(worker_sources)),
+  )
+  return "; ".join(f"{name} {' '.join(values)}" for name, values in directives)
+
+
+def _sources_with_origin(sources: list[str], *urls: str) -> list[str]:
+  """Append origins derived from configured absolute URLs."""
+  result = list(sources)
+  for url in urls:
+    origin = _origin_from_url(url)
+    if origin is not None:
+      result.append(origin)
+  return result
+
+
+def _origin_from_url(url: str) -> str | None:
+  """Extract a CSP-safe origin from an absolute URL."""
+  parsed = urlsplit(url)
+  if not parsed.scheme or not parsed.netloc:
+    return None
+  return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _dedupe(values: list[str]) -> list[str]:
+  """Keep CSP directives stable while removing duplicate origins."""
+  return list(dict.fromkeys(values))
+
+
+def _client_binding_value(binding_mode: str) -> str | None:
+  """Bind cookies to stable client properties to raise the replay bar without sessions."""
+  if binding_mode == "none":
+    return None
+
+  parts = [f"ua={_normalized_user_agent(request.headers.get('User-Agent'))}"]
+  if binding_mode == "ip-user-agent":
+    parts.append(f"ip={_client_ip_value()}")
+  return "|".join(parts)
+
+
+def _normalized_user_agent(value: str | None) -> str:
+  """Collapse insignificant whitespace so proxy formatting differences do not break tokens."""
+  return " ".join((value or "").split()).lower()
+
+
+def _client_ip_value() -> str:
+  """Use the post-proxy remote peer instead of parsing untrusted forwarded chains here."""
+  return _normalized_ip(request.remote_addr) or ""
+
+
+def _is_local_request_host() -> bool:
+  """Allow local HTTP wiring tests while enforcing HTTPS on non-loopback hosts."""
+  host = _request_host_name()
+  if not host:
+    return False
+  if host == "localhost":
+    return True
+
+  try:
+    return ip_address(host).is_loopback
+  except ValueError:
+    return False
+
+
+def _request_host_name() -> str:
+  """Return the normalized host name without a port suffix."""
+  return normalize_host_name(request.host)
+
+
+def _original_request_method() -> str:
+  """Return the original client request method forwarded by the reverse proxy."""
+  return request.headers.get("X-Original-Method", request.method).strip().upper()
+
+
+def _original_request_uri() -> str:
+  """Return the original client request URI forwarded by the reverse proxy."""
+  return request.headers.get("X-Original-URI", "/")
+
+
+def _original_request_path() -> str:
+  """Extract the path component from the original client request URI."""
+  parsed_uri = urlsplit(_original_request_uri())
+  return parsed_uri.path or "/"
+
+
+def _skip_auth_route_matches(settings: object) -> bool:
+  """Return true when the current auth_request subrequest should be bypassed."""
+  original_method = _original_request_method()
+  original_path = _original_request_path()
+  return any(
+    rule.matches(original_path, original_method) for rule in settings.skip_routes
+  )
+
+
+def _normalized_ip(value: str | None) -> str | None:
+  """Canonicalize IP strings so equivalent textual forms hash to the same binding."""
+  if value is None:
+    return None
+
+  candidate = value.strip()
+  if not candidate:
+    return None
+
+  try:
+    return ip_address(candidate).compressed
+  except ValueError:
+    return candidate
+
+
+def _settings() -> object:
+  """Resolve the effective settings for the current request host."""
+  return current_app.config["SETTINGS_BUNDLE"].settings_for_host(request.host)
+
+
+def _challenge_template_context(settings: object) -> dict[str, object]:
+  """Return provider-specific template and script settings for the challenge page."""
+  if settings.cap_enabled:
+    return {
+      "client_translation_keys": (
+        "progress_checking",
+        "progress_verifying",
+        "retry_button",
+        "reload_button",
+        "error_failed",
+        "error_widget_load",
+        "error_widget_runtime",
+        "status_retry_ready",
+        "status_reload_ready",
+      ),
+      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-cap.js"),
+      "external_scripts": (
+        {
+          "src": settings.cap_widget_script_url,
+          "module": False,
+          "async_attr": False,
+          "defer_attr": True,
+        },
+      ),
+      "provider_options": {
+        "apiEndpoint": settings.cap_api_endpoint,
+        "wasmUrl": settings.cap_wasm_script_url,
+      },
+      "provider_template": "providers/cap.html",
+      "initial_status_key": "progress_idle",
+    }
+
+  if settings.hcaptcha_enabled:
+    return {
+      "client_translation_keys": (
+        "progress_checking",
+        "progress_verifying",
+        "error_widget_load",
+        "error_widget_runtime",
+        "status_hcaptcha_ready",
+        "status_retry_ready",
+        "status_reload_ready",
+      ),
+      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-hcaptcha.js"),
+      "external_scripts": (
+        {
+          "src": settings.hcaptcha_script_url,
+          "module": False,
+          "async_attr": False,
+          "defer_attr": True,
+        },
+      ),
+      "provider_options": {"siteKey": settings.hcaptcha_site_key},
+      "provider_template": "providers/hcaptcha.html",
+      "initial_status_key": "status_hcaptcha_ready",
+    }
+
+  if settings.altcha_enabled:
+    altcha_script_url = settings.altcha_effective_script_url
+    return {
+      "client_translation_keys": (
+        "progress_checking",
+        "progress_verifying",
+        "progress_complete",
+        "error_widget_load",
+        "error_widget_runtime",
+        "status_altcha_ready",
+        "status_retry_ready",
+      ),
+      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-altcha.js"),
+      "external_scripts": (
+        {
+          "src": altcha_script_url,
+          "module": True,
+          "async_attr": False,
+          "defer_attr": False,
+        },
+      ),
+      "provider_options": {
+        "challengeUrl": _gatekeeper_path(settings, "/altcha/challenge"),
+      },
+      "provider_template": "providers/altcha.html",
+      "initial_status_key": "status_altcha_ready",
+    }
+
+  return {
+    "client_translation_keys": (
+      "dummy_progress_running",
+      "progress_complete",
+    ),
+    "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-dummy.js"),
+    "external_scripts": (),
+    "provider_options": {},
+    "provider_template": "providers/dummy.html",
+    "initial_status_key": "status_dummy_ready",
+  }
+
+
+def _verification_result(settings: object) -> object:
+  """Run the active verification provider for the current challenge submission."""
+  if settings.cap_enabled:
+    cap_response_token = request.form.get("cap-token", "").strip()
+    if not cap_response_token:
+      current_app.logger.warning("Missing Cap token during verification")
+      return CapVerificationResult(
+        success=False,
+        retryable=False,
+        error_key="error_incomplete",
+        status_code=HTTPStatus.BAD_REQUEST,
+        message="Missing Cap token during verification.",
+        payload=None,
+      )
+
+    return verify_cap_token(
+      settings.cap_siteverify_url,
+      settings.cap_secret_key,
+      cap_response_token,
+      settings.cap_verify_timeout_seconds,
+    )
+
+  if settings.hcaptcha_enabled:
+    return verify_hcaptcha_request(settings, request, _client_ip_value())
+
+  if settings.altcha_enabled:
+    return verify_altcha_request(settings, request, _client_ip_value())
+
+  return verify_dummy_request(settings, request, _client_ip_value())
+
+
+def _json_error_response(
+  payload: dict[str, str],
+  status_code: int,
+  retry_after_seconds: int | None = None,
+) -> Response:
+  """Return one small JSON error response for provider-specific API endpoints."""
+  response = jsonify(payload)
+  response.status_code = status_code
+  response.headers["Cache-Control"] = "no-store"
+  if retry_after_seconds is not None:
+    response.headers["Retry-After"] = str(retry_after_seconds)
+  return response
+
+
+def _gatekeeper_path(settings: object, suffix: str) -> str:
+  """Build a gatekeeper-local URL path from the effective per-website prefix."""
+  return f"{settings.path_prefix}{suffix}"
+
+
+def _gatekeeper_url(settings: object, suffix: str, return_path: str) -> str:
+  """Build a gatekeeper-local URL with query parameters without relying on one endpoint name."""
+  path = _gatekeeper_path(settings, suffix)
+  return f"{path}?{urlencode({'return': return_path})}"

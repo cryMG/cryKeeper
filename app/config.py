@@ -1,0 +1,985 @@
+import os
+import re
+import tomllib
+from dataclasses import dataclass, field
+from ipaddress import ip_network
+from pathlib import Path
+from typing import Any, Mapping
+
+from .i18n import DEFAULT_LOCALE, normalize_locale_name
+
+ENV_PREFIX = "GATEKEEPER_"
+DEFAULT_PATH_PREFIX = "/gatekeeper"
+DEFAULT_CONFIG_FILE = "/app/config.toml"
+DEFAULT_HCAPTCHA_SCRIPT_URL = "https://js.hcaptcha.com/1/api.js?render=explicit"
+DEFAULT_HCAPTCHA_VERIFY_URL = "https://api.hcaptcha.com/siteverify"
+DEFAULT_ALTCHA_SCRIPT_URL = ""
+DEFAULT_ALTCHA_SCRIPT_PATH = "/static/vendor/altcha.min.js"
+DEFAULT_ALTCHA_ALGORITHM = "PBKDF2/SHA-256"
+CONFIG_TABLE_NAME = "gatekeeper"
+WEBSITE_TABLE_NAME = "website"
+CONFIGURABLE_ENV_SUFFIXES = (
+  "SECRET_KEY",
+  "HUMAN_COOKIE_NAME",
+  "HUMAN_COOKIE_TTL_SECONDS",
+  "HUMAN_COOKIE_SECURE",
+  "ALLOW_INSECURE_LOCAL_CAP",
+  "HUMAN_COOKIE_BINDING",
+  "TRUSTED_PROXY_HOPS",
+  "TRUSTED_PROXY_CIDRS",
+  "LOG_LEVEL",
+  "VERIFICATION_MODE",
+  "CAP_PUBLIC_BASE_URL",
+  "CAP_INTERNAL_BASE_URL",
+  "CAP_ASSET_BASE_URL",
+  "CAP_SITE_KEY",
+  "CAP_SECRET_KEY",
+  "CAP_VERIFY_TIMEOUT_SECONDS",
+  "HCAPTCHA_SCRIPT_URL",
+  "HCAPTCHA_SITE_KEY",
+  "HCAPTCHA_SECRET_KEY",
+  "HCAPTCHA_VERIFY_URL",
+  "HCAPTCHA_VERIFY_TIMEOUT_SECONDS",
+  "ALTCHA_SCRIPT_URL",
+  "ALTCHA_HMAC_SECRET",
+  "ALTCHA_HMAC_KEY_SECRET",
+  "ALTCHA_ALGORITHM",
+  "ALTCHA_CHALLENGE_COST",
+  "ALTCHA_EXPIRES_SECONDS",
+  "CHALLENGE_RATE_LIMIT_REQUESTS",
+  "CHALLENGE_RATE_LIMIT_WINDOW_SECONDS",
+  "CHALLENGE_RATE_LIMIT_BLOCK_SECONDS",
+  "VERIFY_RATE_LIMIT_REQUESTS",
+  "VERIFY_RATE_LIMIT_WINDOW_SECONDS",
+  "VERIFY_RATE_LIMIT_BLOCK_SECONDS",
+  "RATE_LIMIT_BACKEND",
+  "RATE_LIMIT_VALKEY_URL",
+  "RATE_LIMIT_VALKEY_PREFIX",
+  "RATE_LIMIT_MAX_ENTRIES",
+  "MAX_RETURN_PATH_LENGTH",
+  "FOOTER_HTML",
+  "SKIP_ROUTES",
+  "PATH_PREFIX",
+)
+KNOWN_CONFIG_KEYS = frozenset(name.lower() for name in CONFIGURABLE_ENV_SUFFIXES)
+NON_WEBSITE_OVERRIDE_SUFFIXES = (
+  "TRUSTED_PROXY_HOPS",
+  "TRUSTED_PROXY_CIDRS",
+  "LOG_LEVEL",
+  "RATE_LIMIT_BACKEND",
+  "RATE_LIMIT_VALKEY_URL",
+  "RATE_LIMIT_VALKEY_PREFIX",
+  "RATE_LIMIT_MAX_ENTRIES",
+)
+NON_WEBSITE_OVERRIDE_KEYS = frozenset(
+  name.lower() for name in NON_WEBSITE_OVERRIDE_SUFFIXES
+)
+HTTP_METHOD_NAME_PATTERN = re.compile(r"^[A-Z-]+$")
+
+
+def normalize_host_name(value: str | None) -> str:
+  """Normalize host names for request matching and website domain lookup."""
+  host = (value or "").strip().lower()
+  if not host:
+    return ""
+
+  if host.count(":") > 1 and not host.startswith("["):
+    return host
+
+  if host.startswith("["):
+    return host.split("]", 1)[0].lstrip("[")
+
+  return host.split(":", 1)[0]
+
+
+def _env_name(name: str) -> str:
+  """Build the fully qualified environment variable name for one gatekeeper key."""
+  return f"{ENV_PREFIX}{name}"
+
+
+def _config_key(name: str) -> str:
+  """Map one gatekeeper environment variable name to its lowercase TOML key."""
+  if not name.startswith(ENV_PREFIX):
+    raise RuntimeError(f"{name} is not a gatekeeper setting.")
+  return name.removeprefix(ENV_PREFIX).lower()
+
+
+def _read_config_file_path() -> Path:
+  """Resolve the configured TOML file path, falling back to the container default."""
+  raw_value = os.getenv(_env_name("CONFIG_FILE"), DEFAULT_CONFIG_FILE)
+  value = (raw_value or "").strip() or DEFAULT_CONFIG_FILE
+  return Path(value).expanduser()
+
+
+@dataclass(frozen=True)
+class WebsiteConfig:
+  """Raw TOML override block for one set of hostnames."""
+
+  domains: tuple[str, ...]
+  file_values: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ConfigDocument:
+  """Parsed config file split into shared defaults and website-specific blocks."""
+
+  default_file_values: Mapping[str, Any]
+  websites: tuple[WebsiteConfig, ...]
+
+  @classmethod
+  def load(cls) -> "ConfigDocument":
+    return _load_config_document()
+
+
+def _load_config_document() -> ConfigDocument:
+  """Load and validate the optional TOML config file into a structured document."""
+  config_path = _read_config_file_path()
+  if not config_path.exists():
+    return ConfigDocument(default_file_values={}, websites=())
+
+  if not config_path.is_file():
+    raise RuntimeError(
+      f"{_env_name('CONFIG_FILE')} must point to a readable TOML file."
+    )
+
+  try:
+    with config_path.open("rb") as config_file:
+      document = tomllib.load(config_file)
+  except tomllib.TOMLDecodeError as exc:
+    raise RuntimeError(f"Failed to parse config file {config_path}: {exc}") from exc
+  except OSError as exc:
+    raise RuntimeError(f"Failed to read config file {config_path}: {exc}") from exc
+
+  return ConfigDocument(
+    default_file_values=_load_default_table(document, config_path),
+    websites=_load_website_tables(document, config_path),
+  )
+
+
+def _load_default_table(
+  document: Mapping[str, Any], config_path: Path
+) -> dict[str, Any]:
+  """Validate and return the shared [gatekeeper] defaults from the TOML document."""
+  raw_table = document.get(CONFIG_TABLE_NAME, {})
+  if raw_table is None:
+    return {}
+
+  if not isinstance(raw_table, dict):
+    raise RuntimeError(
+      f"Config file {config_path} entry [{CONFIG_TABLE_NAME}] must be a table."
+    )
+
+  unknown_keys = sorted(set(raw_table) - KNOWN_CONFIG_KEYS)
+  if unknown_keys:
+    raise RuntimeError(
+      f"Config file {config_path} contains unknown keys in [{CONFIG_TABLE_NAME}]: "
+      f"{', '.join(unknown_keys)}."
+    )
+
+  return dict(raw_table)
+
+
+def _load_website_tables(
+  document: Mapping[str, Any],
+  config_path: Path,
+) -> tuple[WebsiteConfig, ...]:
+  """Validate and return all optional [[website]] override blocks from the TOML document."""
+  raw_websites = document.get(WEBSITE_TABLE_NAME)
+  if raw_websites is None:
+    return ()
+
+  if not isinstance(raw_websites, list):
+    raise RuntimeError(
+      f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] must be an array of tables."
+    )
+
+  seen_domains: dict[str, int] = {}
+  websites: list[WebsiteConfig] = []
+  for index, raw_website in enumerate(raw_websites, start=1):
+    if not isinstance(raw_website, dict):
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} must be a table."
+      )
+
+    unknown_keys = sorted(set(raw_website) - KNOWN_CONFIG_KEYS - {"domains"})
+    if unknown_keys:
+      raise RuntimeError(
+        f"Config file {config_path} contains unknown keys in "
+        f"[[{WEBSITE_TABLE_NAME}]] #{index}: {', '.join(unknown_keys)}."
+      )
+
+    disallowed_keys = sorted(set(raw_website) & NON_WEBSITE_OVERRIDE_KEYS)
+    if disallowed_keys:
+      raise RuntimeError(
+        f"Config file {config_path} may not override {', '.join(disallowed_keys)} "
+        f"inside [[{WEBSITE_TABLE_NAME}]] #{index}."
+      )
+
+    domains = _read_website_domains(raw_website.get("domains"), config_path, index)
+    for domain in domains:
+      previous_index = seen_domains.get(domain)
+      if previous_index is not None:
+        raise RuntimeError(
+          f"Config file {config_path} contains duplicate domain '{domain}' in "
+          f"[[{WEBSITE_TABLE_NAME}]] #{previous_index} and [[{WEBSITE_TABLE_NAME}]] #{index}."
+        )
+      seen_domains[domain] = index
+
+    websites.append(
+      WebsiteConfig(
+        domains=domains,
+        file_values={
+          key: value for key, value in raw_website.items() if key != "domains"
+        },
+      )
+    )
+
+  return tuple(websites)
+
+
+def _read_website_domains(
+  raw_value: Any, config_path: Path, index: int
+) -> tuple[str, ...]:
+  """Validate one website block's host list and normalize each configured domain."""
+  if not isinstance(raw_value, (list, tuple)):
+    raise RuntimeError(
+      f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} must define "
+      "domains as a non-empty TOML array of strings."
+    )
+
+  domains: list[str] = []
+  for raw_domain in raw_value:
+    if not isinstance(raw_domain, str):
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+        "must contain only strings."
+      )
+
+    candidate = raw_domain.strip()
+    if not candidate:
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+        "must not contain blank values."
+      )
+
+    if any(token in candidate for token in ("//", "/", "?", "#")):
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+        "must contain host names only, without paths or schemes."
+      )
+
+    normalized_domain = normalize_host_name(candidate)
+    if not normalized_domain:
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+        "must contain valid host names."
+      )
+
+    if normalized_domain in domains:
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} contains "
+        f"duplicate domain '{normalized_domain}'."
+      )
+    domains.append(normalized_domain)
+
+  if not domains:
+    raise RuntimeError(
+      f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} must define "
+      "at least one domain."
+    )
+
+  return tuple(domains)
+
+
+@dataclass(frozen=True)
+class ConfigSource:
+  """Thin lookup wrapper used by the typed config readers."""
+
+  file_values: Mapping[str, Any]
+
+  def get(self, name: str, default: Any = None) -> Any:
+    return self.file_values.get(_config_key(name), default)
+
+
+def _collect_env_overrides() -> dict[str, Any]:
+  """Collect only non-empty shared environment overrides for later normalization."""
+  overrides: dict[str, Any] = {}
+  for suffix in CONFIGURABLE_ENV_SUFFIXES:
+    env_name = _env_name(suffix)
+    raw_env_value = os.getenv(env_name)
+    if raw_env_value is not None and raw_env_value.strip():
+      overrides[_config_key(env_name)] = raw_env_value
+  return overrides
+
+
+def _strip_trailing_slash(value: str) -> str:
+  """Normalize base URLs so path joining below does not produce double slashes."""
+  return value.rstrip("/")
+
+
+def _read_text(config_source: ConfigSource, name: str, default: str) -> str:
+  """Read raw string settings from env vars or the TOML file."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return default
+
+  if not isinstance(raw_value, str):
+    raise RuntimeError(f"{name} must be a string.")
+
+  return raw_value
+
+
+def _read_base_url(
+  config_source: ConfigSource,
+  name: str,
+  default: str,
+  *,
+  blank_uses_default: bool = False,
+) -> str:
+  """Read URL-like settings while normalizing trailing slashes."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return default
+
+  if not isinstance(raw_value, str):
+    raise RuntimeError(f"{name} must be a string.")
+
+  value = raw_value.strip()
+  if blank_uses_default and not value:
+    return default
+
+  return _strip_trailing_slash(value)
+
+
+def _read_bool(config_source: ConfigSource, name: str, default: bool) -> bool:
+  """Read relaxed boolean env vars such as true/1/yes/on."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return default
+
+  if isinstance(raw_value, bool):
+    return raw_value
+
+  if isinstance(raw_value, str):
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+  raise RuntimeError(f"{name} must be a boolean.")
+
+
+def _read_int(config_source: ConfigSource, name: str, default: int) -> int:
+  """Read integer env vars while keeping the caller-side defaults in one place."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return default
+
+  if isinstance(raw_value, bool):
+    raise RuntimeError(f"{name} must be an integer.")
+
+  if isinstance(raw_value, int):
+    return raw_value
+
+  if isinstance(raw_value, str):
+    try:
+      return int(raw_value.strip())
+    except ValueError as exc:
+      raise RuntimeError(f"{name} must be an integer.") from exc
+
+  raise RuntimeError(f"{name} must be an integer.")
+
+
+def _read_non_negative_int(config_source: ConfigSource, name: str, default: int) -> int:
+  """Read integer env vars that may be disabled with 0 but never go below it."""
+  value = _read_int(config_source, name, default)
+  if value < 0:
+    raise RuntimeError(f"{name} must be greater than or equal to 0.")
+  return value
+
+
+def _read_csv_values(config_source: ConfigSource, name: str) -> tuple[str, ...]:
+  """Read comma-separated string lists while ignoring empty segments."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return ()
+
+  if isinstance(raw_value, str):
+    return tuple(value.strip() for value in raw_value.split(",") if value.strip())
+
+  if isinstance(raw_value, (list, tuple)):
+    values: list[str] = []
+    for value in raw_value:
+      if not isinstance(value, str):
+        raise RuntimeError(f"{name} must contain only string values.")
+      normalized_value = value.strip()
+      if normalized_value:
+        values.append(normalized_value)
+    return tuple(values)
+
+  raise RuntimeError(f"{name} must be a comma-separated string or TOML array.")
+
+
+def _read_path_prefix(config_source: ConfigSource, name: str, default: str) -> str:
+  """Read and validate the public path prefix reserved for gatekeeper routes."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return default
+
+  if not isinstance(raw_value, str):
+    raise RuntimeError(f"{name} must be a string.")
+
+  value = raw_value.strip()
+  if not value:
+    return default
+
+  if value == "/":
+    raise RuntimeError(f"{name} must not be '/'.")
+
+  if not value.startswith("/"):
+    raise RuntimeError(f"{name} must start with '/'.")
+
+  if value.endswith("/"):
+    raise RuntimeError(f"{name} must not end with '/'.")
+
+  if "?" in value or "#" in value or "//" in value:
+    raise RuntimeError(
+      f"{name} must be a clean path prefix without query strings, fragments, or double slashes."
+    )
+
+  return value
+
+
+def _read_cookie_name(config_source: ConfigSource, name: str, secure: bool) -> str:
+  """Choose a host-scoped cookie by default once the deployment uses HTTPS."""
+  raw_value = config_source.get(name)
+  if raw_value is not None and not isinstance(raw_value, str):
+    raise RuntimeError(f"{name} must be a string.")
+
+  value = (raw_value or "").strip()
+
+  if not value:
+    return "__Host-gatekeeper_verified" if secure else "gatekeeper_verified"
+
+  if secure and value == "gatekeeper_verified":
+    return "__Host-gatekeeper_verified"
+
+  if value.startswith("__Host-") and not secure:
+    raise RuntimeError(
+      f"{name} uses a '__Host-' prefix and therefore requires GATEKEEPER_HUMAN_COOKIE_SECURE=true."
+    )
+
+  return value
+
+
+def _read_trusted_proxy_cidrs(
+  config_source: ConfigSource, name: str
+) -> tuple[str, ...]:
+  """Validate trusted proxy CIDRs that are allowed to supply forwarded headers."""
+  values = _read_csv_values(config_source, name)
+  for value in values:
+    ip_network(value, strict=False)
+  return values
+
+
+def _locale_fallback_chain(locale: str | None) -> tuple[str, ...]:
+  """Return locale candidates ordered by specificity and English fallback."""
+  candidates: list[str] = []
+  for raw_locale in (locale, DEFAULT_LOCALE):
+    normalized_locale = normalize_locale_name(raw_locale)
+    if not normalized_locale:
+      continue
+
+    candidates.append(normalized_locale)
+    base_locale = normalized_locale.split("-", 1)[0]
+    if base_locale != normalized_locale:
+      candidates.append(base_locale)
+
+  return tuple(dict.fromkeys(candidates))
+
+
+@dataclass(frozen=True)
+class LocalizedHtml:
+  """Trusted HTML that may vary by locale with English fallback."""
+
+  default_html: str = ""
+  translations: tuple[tuple[str, str], ...] = ()
+
+  def resolve(self, locale: str | None) -> str:
+    """Return the best localized HTML block for the requested locale."""
+    localized_values = dict(self.translations)
+    for candidate in _locale_fallback_chain(locale):
+      resolved_html = localized_values.get(candidate)
+      if resolved_html:
+        return resolved_html
+    return self.default_html
+
+  @property
+  def by_locale(self) -> dict[str, str]:
+    """Expose configured localized HTML values for tests and introspection."""
+    return dict(self.translations)
+
+
+def _read_footer_html(config_source: ConfigSource, name: str) -> LocalizedHtml:
+  """Read trusted footer HTML from a string or a locale-keyed TOML mapping."""
+  raw_value = config_source.get(name)
+  if raw_value is None:
+    return LocalizedHtml()
+
+  if isinstance(raw_value, str):
+    return LocalizedHtml(default_html=raw_value.strip())
+
+  if isinstance(raw_value, dict):
+    localized_values: dict[str, str] = {}
+    for raw_locale, raw_html in raw_value.items():
+      if not isinstance(raw_locale, str) or not isinstance(raw_html, str):
+        raise RuntimeError(
+          f"{name} must contain only string locale keys and string HTML values."
+        )
+
+      locale = normalize_locale_name(raw_locale)
+      if not locale:
+        raise RuntimeError(f"{name} must not contain blank locale keys.")
+
+      html_value = raw_html.strip()
+      if html_value:
+        localized_values[locale] = html_value
+
+    return LocalizedHtml(translations=tuple(localized_values.items()))
+
+  raise RuntimeError(f"{name} must be a string or TOML table of strings.")
+
+
+def _merge_footer_html_values(base_value: Any, override_value: Any) -> Any:
+  """Merge localized footer tables so website overrides may inherit English defaults."""
+  if not isinstance(override_value, dict):
+    return override_value
+
+  merged_value: dict[str, Any] = {}
+  if isinstance(base_value, dict):
+    merged_value.update(base_value)
+  elif isinstance(base_value, str) and base_value.strip():
+    merged_value[DEFAULT_LOCALE] = base_value
+
+  merged_value.update(override_value)
+  return merged_value
+
+
+def _merge_effective_values(
+  base_values: Mapping[str, Any], override_values: Mapping[str, Any]
+) -> dict[str, Any]:
+  """Merge website overrides onto shared defaults with special handling for localized footer HTML."""
+  effective_values = dict(base_values)
+  for key, value in override_values.items():
+    if key == "footer_html":
+      effective_values[key] = _merge_footer_html_values(
+        effective_values.get(key), value
+      )
+      continue
+
+    effective_values[key] = value
+
+  return effective_values
+
+
+@dataclass(frozen=True)
+class SkipRouteRule:
+  """One auth bypass rule matched against the original request method and path."""
+
+  pattern: str
+  regex: re.Pattern[str] = field(repr=False, compare=False)
+  method: str | None = None
+
+  def matches(self, path: str, method: str) -> bool:
+    """Return true when the rule applies to the given original request."""
+    if self.method is not None and method != self.method:
+      return False
+    return self.regex.search(path) is not None
+
+
+def _parse_skip_route_rule(value: str, name: str) -> SkipRouteRule:
+  """Parse one skip_routes entry in oauth2-proxy-compatible METHOD=REGEX form."""
+  rule_text = value.strip()
+  method: str | None = None
+  pattern = rule_text
+
+  method_candidate, separator, pattern_candidate = rule_text.partition("=")
+  normalized_method = method_candidate.strip().upper()
+  if separator and HTTP_METHOD_NAME_PATTERN.fullmatch(normalized_method):
+    method = normalized_method
+    pattern = pattern_candidate.strip()
+    if not pattern:
+      raise RuntimeError(
+        f"{name} contains a method-specific rule without a regex pattern."
+      )
+
+  try:
+    compiled_pattern = re.compile(pattern)
+  except re.error as exc:
+    raise RuntimeError(f"{name} contains an invalid regex '{pattern}': {exc}.") from exc
+
+  return SkipRouteRule(pattern=pattern, method=method, regex=compiled_pattern)
+
+
+def _read_skip_routes(
+  config_source: ConfigSource, name: str
+) -> tuple[SkipRouteRule, ...]:
+  """Read auth bypass routes from a comma-separated env var or TOML string array."""
+  values = _read_csv_values(config_source, name)
+  return tuple(_parse_skip_route_rule(value, name) for value in values)
+
+
+@dataclass(frozen=True)
+class Settings:
+  """Effective runtime settings derived from defaults, TOML, and env vars."""
+
+  secret_key: str
+  cookie_name: str
+  cookie_ttl_seconds: int
+  cookie_secure: bool
+  allow_insecure_local_cap: bool
+  cookie_binding_mode: str
+  trusted_proxy_hops: int
+  trusted_proxy_cidrs: tuple[str, ...]
+  log_level: str
+  verification_mode: str
+  cap_public_base_url: str
+  cap_internal_base_url: str
+  cap_asset_base_url: str
+  cap_site_key: str
+  cap_secret_key: str
+  cap_verify_timeout_seconds: int
+  hcaptcha_script_url: str
+  hcaptcha_site_key: str
+  hcaptcha_secret_key: str
+  hcaptcha_verify_url: str
+  hcaptcha_verify_timeout_seconds: int
+  altcha_script_url: str
+  altcha_hmac_secret: str
+  altcha_hmac_key_secret: str
+  altcha_algorithm: str
+  altcha_challenge_cost: int
+  altcha_expires_seconds: int
+  challenge_rate_limit_requests: int
+  challenge_rate_limit_window_seconds: int
+  challenge_rate_limit_block_seconds: int
+  verify_rate_limit_requests: int
+  verify_rate_limit_window_seconds: int
+  verify_rate_limit_block_seconds: int
+  rate_limit_backend: str
+  rate_limit_valkey_url: str
+  rate_limit_valkey_prefix: str
+  rate_limit_max_entries: int
+  max_return_path_length: int
+  footer_html: LocalizedHtml
+  skip_routes: tuple[SkipRouteRule, ...]
+  path_prefix: str
+  blocked_return_prefixes: tuple[str, ...]
+
+  @property
+  def host_cookie_enabled(self) -> bool:
+    return self.cookie_name.startswith("__Host-")
+
+  @property
+  def cap_enabled(self) -> bool:
+    return self.verification_mode == "cap"
+
+  @property
+  def hcaptcha_enabled(self) -> bool:
+    return self.verification_mode == "hcaptcha"
+
+  @property
+  def altcha_enabled(self) -> bool:
+    return self.verification_mode == "altcha"
+
+  @property
+  def real_captcha_enabled(self) -> bool:
+    return self.verification_mode in {"cap", "hcaptcha", "altcha"}
+
+  @property
+  def cap_configured(self) -> bool:
+    return all(
+      (
+        self.cap_public_base_url,
+        self.cap_internal_base_url,
+        self.cap_site_key,
+        self.cap_secret_key,
+      )
+    )
+
+  @property
+  def hcaptcha_configured(self) -> bool:
+    return all(
+      (
+        self.hcaptcha_script_url,
+        self.hcaptcha_verify_url,
+        self.hcaptcha_site_key,
+        self.hcaptcha_secret_key,
+      )
+    )
+
+  @property
+  def altcha_configured(self) -> bool:
+    return bool(self.altcha_effective_script_url and self.altcha_hmac_secret)
+
+  @property
+  def cap_api_endpoint(self) -> str:
+    return f"{self.cap_public_base_url}/{self.cap_site_key}/"
+
+  @property
+  def cap_siteverify_url(self) -> str:
+    return f"{self.cap_internal_base_url}/{self.cap_site_key}/siteverify"
+
+  @property
+  def cap_widget_script_url(self) -> str:
+    return f"{self.cap_asset_base_url}/assets/widget.js"
+
+  @property
+  def cap_wasm_script_url(self) -> str:
+    return f"{self.cap_asset_base_url}/assets/cap_wasm.js"
+
+  @property
+  def altcha_effective_script_url(self) -> str:
+    return self.altcha_script_url or f"{self.path_prefix}{DEFAULT_ALTCHA_SCRIPT_PATH}"
+
+  @property
+  def altcha_effective_hmac_key_secret(self) -> str:
+    return self.altcha_hmac_key_secret or self.altcha_hmac_secret
+
+
+@dataclass(frozen=True)
+class WebsiteSettings:
+  """Effective runtime settings for one website block and its matched domains."""
+
+  domains: tuple[str, ...]
+  settings: Settings
+
+
+@dataclass(frozen=True)
+class SettingsBundle:
+  """Shared defaults plus all validated per-website effective settings."""
+
+  default_settings: Settings
+  websites: tuple[WebsiteSettings, ...]
+
+  def settings_for_host(self, host: str | None) -> Settings:
+    """Return the effective settings that apply to the current request host."""
+    normalized_host = normalize_host_name(host)
+    if not normalized_host:
+      return self.default_settings
+
+    for website in self.websites:
+      if normalized_host in website.domains:
+        return website.settings
+
+    return self.default_settings
+
+  @property
+  def path_prefixes(self) -> tuple[str, ...]:
+    """Return every unique gatekeeper prefix that must be registered at startup."""
+    prefixes = [self.default_settings.path_prefix]
+    prefixes.extend(website.settings.path_prefix for website in self.websites)
+    return tuple(dict.fromkeys(prefixes))
+
+
+def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
+  """Normalize one effective configuration layer into runtime settings."""
+  config_source = ConfigSource(file_values=values)
+  cap_public_base_url = _read_base_url(
+    config_source, _env_name("CAP_PUBLIC_BASE_URL"), ""
+  )
+  cap_internal_base_url = _read_base_url(
+    config_source,
+    _env_name("CAP_INTERNAL_BASE_URL"),
+    cap_public_base_url,
+    blank_uses_default=True,
+  )
+  cap_asset_base_url = _read_base_url(
+    config_source,
+    _env_name("CAP_ASSET_BASE_URL"),
+    cap_public_base_url,
+    blank_uses_default=True,
+  )
+  hcaptcha_script_url = (
+    _read_text(
+      config_source,
+      _env_name("HCAPTCHA_SCRIPT_URL"),
+      DEFAULT_HCAPTCHA_SCRIPT_URL,
+    ).strip()
+    or DEFAULT_HCAPTCHA_SCRIPT_URL
+  )
+  hcaptcha_verify_url = (
+    _read_text(
+      config_source,
+      _env_name("HCAPTCHA_VERIFY_URL"),
+      DEFAULT_HCAPTCHA_VERIFY_URL,
+    ).strip()
+    or DEFAULT_HCAPTCHA_VERIFY_URL
+  )
+  altcha_script_url = (
+    _read_text(
+      config_source,
+      _env_name("ALTCHA_SCRIPT_URL"),
+      DEFAULT_ALTCHA_SCRIPT_URL,
+    ).strip()
+    or DEFAULT_ALTCHA_SCRIPT_URL
+  )
+  path_prefix = _read_path_prefix(
+    config_source, _env_name("PATH_PREFIX"), DEFAULT_PATH_PREFIX
+  )
+  cookie_secure = _read_bool(config_source, _env_name("HUMAN_COOKIE_SECURE"), False)
+  return Settings(
+    secret_key=_read_text(
+      config_source, _env_name("SECRET_KEY"), "change-me-in-production"
+    ),
+    cookie_name=_read_cookie_name(
+      config_source, _env_name("HUMAN_COOKIE_NAME"), cookie_secure
+    ),
+    cookie_ttl_seconds=_read_int(
+      config_source,
+      _env_name("HUMAN_COOKIE_TTL_SECONDS"),
+      7 * 24 * 60 * 60,
+    ),
+    cookie_secure=cookie_secure,
+    allow_insecure_local_cap=_read_bool(
+      config_source,
+      _env_name("ALLOW_INSECURE_LOCAL_CAP"),
+      False,
+    ),
+    cookie_binding_mode=_read_text(
+      config_source,
+      _env_name("HUMAN_COOKIE_BINDING"),
+      "user-agent",
+    )
+    .strip()
+    .lower(),
+    trusted_proxy_hops=_read_non_negative_int(
+      config_source, _env_name("TRUSTED_PROXY_HOPS"), 0
+    ),
+    trusted_proxy_cidrs=_read_trusted_proxy_cidrs(
+      config_source,
+      _env_name("TRUSTED_PROXY_CIDRS"),
+    ),
+    log_level=_read_text(config_source, _env_name("LOG_LEVEL"), "INFO").upper(),
+    verification_mode=_read_text(
+      config_source,
+      _env_name("VERIFICATION_MODE"),
+      "dummy",
+    )
+    .strip()
+    .lower(),
+    cap_public_base_url=cap_public_base_url,
+    cap_internal_base_url=cap_internal_base_url,
+    cap_asset_base_url=cap_asset_base_url,
+    cap_site_key=_read_text(config_source, _env_name("CAP_SITE_KEY"), "").strip(),
+    cap_secret_key=_read_text(config_source, _env_name("CAP_SECRET_KEY"), "").strip(),
+    cap_verify_timeout_seconds=_read_int(
+      config_source, _env_name("CAP_VERIFY_TIMEOUT_SECONDS"), 5
+    ),
+    hcaptcha_script_url=hcaptcha_script_url,
+    hcaptcha_site_key=_read_text(
+      config_source, _env_name("HCAPTCHA_SITE_KEY"), ""
+    ).strip(),
+    hcaptcha_secret_key=_read_text(
+      config_source, _env_name("HCAPTCHA_SECRET_KEY"), ""
+    ).strip(),
+    hcaptcha_verify_url=hcaptcha_verify_url,
+    hcaptcha_verify_timeout_seconds=_read_int(
+      config_source, _env_name("HCAPTCHA_VERIFY_TIMEOUT_SECONDS"), 5
+    ),
+    altcha_script_url=altcha_script_url,
+    altcha_hmac_secret=_read_text(
+      config_source, _env_name("ALTCHA_HMAC_SECRET"), ""
+    ).strip(),
+    altcha_hmac_key_secret=_read_text(
+      config_source, _env_name("ALTCHA_HMAC_KEY_SECRET"), ""
+    ).strip(),
+    altcha_algorithm=(
+      _read_text(
+        config_source,
+        _env_name("ALTCHA_ALGORITHM"),
+        DEFAULT_ALTCHA_ALGORITHM,
+      ).strip()
+      or DEFAULT_ALTCHA_ALGORITHM
+    ),
+    altcha_challenge_cost=_read_non_negative_int(
+      config_source, _env_name("ALTCHA_CHALLENGE_COST"), 5000
+    ),
+    altcha_expires_seconds=_read_non_negative_int(
+      config_source, _env_name("ALTCHA_EXPIRES_SECONDS"), 300
+    ),
+    challenge_rate_limit_requests=_read_non_negative_int(
+      config_source, _env_name("CHALLENGE_RATE_LIMIT_REQUESTS"), 20
+    ),
+    challenge_rate_limit_window_seconds=_read_non_negative_int(
+      config_source, _env_name("CHALLENGE_RATE_LIMIT_WINDOW_SECONDS"), 60
+    ),
+    challenge_rate_limit_block_seconds=_read_non_negative_int(
+      config_source, _env_name("CHALLENGE_RATE_LIMIT_BLOCK_SECONDS"), 120
+    ),
+    verify_rate_limit_requests=_read_non_negative_int(
+      config_source,
+      _env_name("VERIFY_RATE_LIMIT_REQUESTS"),
+      10,
+    ),
+    verify_rate_limit_window_seconds=_read_non_negative_int(
+      config_source, _env_name("VERIFY_RATE_LIMIT_WINDOW_SECONDS"), 60
+    ),
+    verify_rate_limit_block_seconds=_read_non_negative_int(
+      config_source, _env_name("VERIFY_RATE_LIMIT_BLOCK_SECONDS"), 300
+    ),
+    rate_limit_backend=_read_text(
+      config_source, _env_name("RATE_LIMIT_BACKEND"), "auto"
+    )
+    .strip()
+    .lower(),
+    rate_limit_valkey_url=_read_text(
+      config_source, _env_name("RATE_LIMIT_VALKEY_URL"), ""
+    ).strip(),
+    rate_limit_valkey_prefix=_read_text(
+      config_source,
+      _env_name("RATE_LIMIT_VALKEY_PREFIX"),
+      "gatekeeper:rl",
+    ).strip()
+    or "gatekeeper:rl",
+    rate_limit_max_entries=_read_non_negative_int(
+      config_source,
+      _env_name("RATE_LIMIT_MAX_ENTRIES"),
+      10000,
+    ),
+    max_return_path_length=_read_int(
+      config_source, _env_name("MAX_RETURN_PATH_LENGTH"), 2048
+    ),
+    footer_html=_read_footer_html(config_source, _env_name("FOOTER_HTML")),
+    skip_routes=_read_skip_routes(config_source, _env_name("SKIP_ROUTES")),
+    path_prefix=path_prefix,
+    blocked_return_prefixes=(
+      path_prefix,
+      "/_human_check",
+    ),
+  )
+
+
+def load_settings_bundle() -> SettingsBundle:
+  """Load default settings plus any TOML-only per-website overrides."""
+  config_document = ConfigDocument.load()
+  base_values = dict(config_document.default_file_values)
+  base_values.update(_collect_env_overrides())
+
+  default_settings = _load_settings_from_values(base_values)
+  website_settings: list[WebsiteSettings] = []
+  for website in config_document.websites:
+    effective_values = _merge_effective_values(base_values, website.file_values)
+    website_settings.append(
+      WebsiteSettings(
+        domains=website.domains,
+        settings=_load_settings_from_values(effective_values),
+      )
+    )
+
+  return SettingsBundle(
+    default_settings=default_settings,
+    websites=tuple(website_settings),
+  )
+
+
+def load_settings() -> Settings:
+  """Load the default normalized settings for backward-compatible callers."""
+  return load_settings_bundle().default_settings

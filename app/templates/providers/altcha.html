@@ -1,0 +1,9 @@
+<altcha-widget
+  id="altcha-widget"
+  auto="{{ 'onload' if auto_start else 'off' }}"
+  challenge="{{ provider_options.challengeUrl }}"
+  language="{{ language_code }}"
+  name="altcha"
+  type="checkbox"
+  configuration='{"hideLogo": true, "hideFooter": true, "display": "{{ 'invisible' if auto_start else 'standard' }}"}'
+></altcha-widget>

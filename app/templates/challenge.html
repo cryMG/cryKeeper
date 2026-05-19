@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="{{ language_code }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ translations.page_title }}</title>
+  <script src="{{ challenge_shared_script_url }}" defer></script>
+  <script src="{{ challenge_runtime_script_url }}" defer></script>
+  {% for provider_script in provider_external_scripts %}
+  <script src="{{ provider_script.src }}"{% if provider_script.module %} type="module"{% endif %}{% if provider_script.async_attr %} async{% endif %}{% if provider_script.defer_attr %} defer{% endif %}></script>
+  {% endfor %}
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      --page-bg: #edf2f7;
+      --grid-color: rgba(15, 23, 42, 0.06);
+      --panel-bg: rgba(255, 255, 255, 0.9);
+      --panel-border: #0f172a;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --accent: #0f172a;
+      --accent-strong: #2563eb;
+      --progress-track: #cbd5e1;
+      --progress-fill: #2563eb;
+      --error-bg: #fee2e2;
+      --error-border: #b91c1c;
+      --error-text: #7f1d1d;
+      --button-bg: #0f172a;
+      --button-fg: #f8fafc;
+      --button-border: #0f172a;
+      background-color: var(--page-bg);
+      color: var(--text-main);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page-bg: #0b1120;
+        --grid-color: rgba(148, 163, 184, 0.08);
+        --panel-bg: rgba(15, 23, 42, 0.92);
+        --panel-border: #94a3b8;
+        --text-main: #e2e8f0;
+        --text-muted: #94a3b8;
+        --accent: #e2e8f0;
+        --accent-strong: #60a5fa;
+        --progress-track: #334155;
+        --progress-fill: #60a5fa;
+        --error-bg: rgba(127, 29, 29, 0.35);
+        --error-border: #f87171;
+        --error-text: #fecaca;
+        --button-bg: #e2e8f0;
+        --button-fg: #0f172a;
+        --button-border: #e2e8f0;
+      }
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    main {
+      width: min(100%, 650px);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      box-shadow: 10px 10px 0 0 rgba(15, 23, 42, 0.12);
+      padding: 32px;
+    }
+
+    .eyebrow {
+      margin: 0 0 20px;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 2rem;
+      line-height: 1.08;
+    }
+
+    p {
+      margin: 0 0 20px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    .frame {
+      border: 1px solid var(--panel-border);
+      padding: 18px;
+      margin-top: 28px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 10px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .status-label {
+      color: var(--text-main);
+    }
+
+    .progress-shell {
+      position: relative;
+      height: 20px;
+      border: 1px solid var(--panel-border);
+      background: var(--progress-track);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          var(--progress-fill) 0,
+          var(--progress-fill) 14px,
+          transparent 14px,
+          transparent 18px
+        ),
+        linear-gradient(90deg, var(--progress-fill), var(--accent-strong));
+      transition: width 140ms linear;
+    }
+
+    .status-text {
+      margin: 14px 0 0;
+      min-height: 1.5em;
+      color: var(--text-main);
+    }
+
+    button {
+      width: 100%;
+      border: 1px solid var(--button-border);
+      padding: 14px 18px;
+      font-size: 1rem;
+      font-weight: 700;
+      background: var(--button-bg);
+      color: var(--button-fg);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .error {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--error-border);
+      background: var(--error-bg);
+      color: var(--error-text);
+      line-height: 1.4;
+    }
+
+    .notice {
+      display: block;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(148, 163, 184, 0.35);
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .actions {
+      margin-top: 18px;
+    }
+
+    .provider-widget {
+      margin-top: 18px;
+      min-height: 78px;
+    }
+
+    altcha-widget {
+      display: block;
+      margin-top: 18px;
+    }
+
+    .footer {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(148, 163, 184, 0.35);
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .footer :first-child {
+      margin-top: 0;
+    }
+
+    .footer :last-child {
+      margin-bottom: 0;
+    }
+
+    .footer a {
+      color: var(--text-main);
+    }
+
+    .footer a:hover {
+      color: var(--accent-strong);
+    }
+
+    .footer strong {
+      color: var(--text-main);
+    }
+
+    .is-hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">{{ translations.eyebrow }}</p>
+    <h1>{{ translations.headline }}</h1>
+    <p>{{ translations.body }}</p>
+    {% if error_message %}
+    <p class="error">{{ error_message }}</p>
+    {% endif %}
+    <form action="{{ verify_action_url }}" method="post" id="verification-form" data-auto-start="{{ 'true' if auto_start else 'false' }}" data-rate-limited="{{ 'true' if rate_limited else 'false' }}" data-verification-mode="{{ verification_mode }}" data-provider-options="{{ provider_options | tojson | forceescape }}" data-client-messages="{{ client_translations | tojson | forceescape }}">
+      <input type="hidden" name="return" value="{{ return_path }}">
+      <section class="frame" aria-label="{{ translations.progress_label }}">
+        <div class="status-row">
+          <span>{{ translations.progress_label }}</span>
+          <span class="status-label" id="progress-percent">0%</span>
+        </div>
+        <div class="progress-shell" role="progressbar" aria-label="{{ translations.progress_label }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <p class="status-text" id="status-text">{{ initial_status_text }}</p>
+      </section>
+      {% include provider_template %}
+    </form>
+    {% if verification_mode == "dummy" %}
+    <p class="notice">{{ translations.dummy_notice }}</p>
+    {% endif %}
+    {% if footer_html %}
+    <footer class="footer">{{ footer_html | safe }}</footer>
+    {% endif %}
+  </main>
+</body>
+</html>

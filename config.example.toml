@@ -1,0 +1,335 @@
+# Copy this file to config.toml in the project root for local Docker usage, or
+# point GATEKEEPER_CONFIG_FILE at another path.
+#
+# Shared default settings live under the [gatekeeper] table. The key names match
+# the GATEKEEPER_* environment variables without the GATEKEEPER_ prefix and in
+# lowercase. Example: GATEKEEPER_PATH_PREFIX becomes path_prefix.
+#
+# Optional [[website]] entries can override most settings for specific request
+# hosts. Those per-website overrides are TOML-only and are matched against the
+# normalized Host header without any port suffix.
+#
+# Non-empty environment variables still override individual [gatekeeper] values.
+# Matching [[website]] entries are applied afterwards and therefore can override
+# those shared defaults for their configured domains. In the Docker Compose
+# setup, leaving a GATEKEEPER_* env var empty lets config.toml or the built-in
+# application default take over.
+
+[gatekeeper]
+
+# HMAC signing key for the human-verification cookie.
+#
+# Change this in every real deployment. Anyone who knows this key can mint
+# valid gatekeeper cookies. Multiple gatekeeper instances may share the same
+# key if they are meant to trust each other's cookies. Gatekeeper refuses to
+# start while this placeholder value is still configured.
+secret_key = "change-me-in-production"
+
+# Name of the signed cookie written after successful verification.
+#
+# Leave this on gatekeeper_verified unless you need a different cookie name for
+# routing or compatibility reasons. When human_cookie_secure = true and this
+# value still equals gatekeeper_verified, the application automatically upgrades
+# it to __Host-gatekeeper_verified for stricter browser-side scoping.
+human_cookie_name = "gatekeeper_verified"
+
+# Lifetime of a successful human verification, in seconds.
+#
+# 604800 seconds equals 7 days. Shorter values reduce replay exposure but cause
+# users to solve the challenge more often.
+human_cookie_ttl_seconds = 604800
+
+# Whether the verification cookie is marked Secure.
+#
+# The bundled HTTPS demo expects this to be true. Change it to false only for
+# local plain-HTTP development without the demo nginx TLS terminator.
+human_cookie_secure = true
+
+# Localhost-only override that allows CAP mode over plain HTTP.
+#
+# This exists only for local development against http://localhost. It does not
+# open non-local HTTP challenge flows; those remain blocked by the application.
+allow_insecure_local_cap = false
+
+# How strongly the signed cookie is bound to the client.
+#
+# none:
+#   Any client that gets the cookie can replay it until expiry.
+# user-agent:
+#   Default. Reuse requires the same normalized User-Agent header.
+# ip-user-agent:
+#   Also binds the cookie to the client IP seen by the gatekeeper. This is more
+#   restrictive but can force re-verification after network changes.
+human_cookie_binding = "user-agent"
+
+# Number of trusted proxy hops whose forwarded headers should be consumed.
+#
+# Gatekeeper is intended to run behind nginx or another trusted reverse proxy.
+# This example assumes one trusted proxy hop. Adjust it only if your real proxy
+# chain is longer.
+trusted_proxy_hops = 1
+
+# List of proxy CIDRs that are allowed to supply forwarded headers.
+#
+# Use this to limit which direct peers may send trusted X-Forwarded-* headers.
+# In TOML, this is an array of strings instead of the comma-separated env-var
+# format. This example assumes a Docker bridge/private container network.
+# Override it if your nginx or reverse proxy uses a different source range.
+trusted_proxy_cidrs = ["172.16.0.0/12"]
+
+# Application log verbosity.
+#
+# Typical values are DEBUG, INFO, WARNING, and ERROR. The logger normalizes this
+# to uppercase internally.
+log_level = "INFO"
+
+# Verification backend used by the challenge flow.
+#
+# dummy:
+#   No external provider. Useful for wiring tests and local debugging.
+# cap:
+#   Requires a real Cap instance and server-side verification via /siteverify.
+# hcaptcha:
+#   Requires hCaptcha's browser widget plus server-side /siteverify.
+# altcha:
+#   Uses the ALTCHA widget plus server-side cryptographic verification.
+verification_mode = "dummy"
+
+# Public URL namespace reserved for the gatekeeper endpoints.
+#
+# This must start with / and must not end with /. Keep nginx, auth_request, and
+# any external links aligned with the same prefix. The bundled demo stack keeps
+# its default host fixed on /gatekeeper.
+path_prefix = "/gatekeeper"
+
+# Maximum accepted length of the original return path.
+#
+# Overlong return values are normalized back to /. Increase this only if your
+# protected application legitimately uses very long local URLs.
+max_return_path_length = 2048
+
+# Optional trusted HTML rendered at the bottom of the challenge page.
+#
+# This may be either one plain string for all languages or locale-keyed nested
+# values such as footer_html.en and footer_html.de. When a localized footer is
+# configured, English is the fallback if the selected language has no footer
+# entry. The content is rendered as-is and is not sanitized, so keep it in
+# trusted deployment config only.
+footer_html.en = 'This check is powered by <strong>cryeffect Media Group</strong>'
+footer_html.de = 'Diese Prüfung wird von <strong>cryeffect Media Group</strong> bereitgestellt'
+
+# Original request routes that should always bypass the auth check.
+#
+# Each entry uses the oauth2-proxy-like syntax METHOD=REGEX or just REGEX.
+# Rules without a method match every request method. The regex runs against the
+# original request path without the query string. In TOML, this is an array of
+# strings instead of the comma-separated env-var format.
+#
+# Examples:
+#   "^/healthz$"
+#   "GET=^/assets/"
+#   "POST=^/api/"
+#
+# The demo stack preconfigures /protected/skip-route/ so you can verify that
+# skip_routes works without solving a challenge first.
+skip_routes = ["GET=^/protected/skip-route/$", "POST=^/protected/skip-route/$"]
+
+# Number of GET /challenge requests allowed inside one challenge rate-limit
+# window.
+#
+# Set this to 0 to disable the challenge limiter entirely.
+challenge_rate_limit_requests = 20
+
+# Length of the challenge rate-limit window, in seconds.
+#
+# Example: with 20 requests and 60 seconds, the 21st request inside a minute is
+# blocked.
+challenge_rate_limit_window_seconds = 60
+
+# Temporary block duration after the challenge request budget is exhausted.
+#
+# Clients that exceed the challenge budget receive HTTP 429 until this period
+# expires.
+challenge_rate_limit_block_seconds = 120
+
+# Number of POST /verify requests allowed inside one verify rate-limit window.
+#
+# Set this to 0 to disable the verify limiter entirely.
+verify_rate_limit_requests = 10
+
+# Length of the verify rate-limit window, in seconds.
+#
+# Keep this aligned with how aggressively you want to slow down repeated form or
+# token submission attempts.
+verify_rate_limit_window_seconds = 60
+
+# Temporary block duration after the verify request budget is exhausted.
+#
+# This should usually be at least as long as the window and is often longer,
+# because repeated verification failures are higher-signal than page refreshes.
+verify_rate_limit_block_seconds = 300
+
+# Storage backend used for rate limiting.
+#
+# auto:
+#   Use Valkey when rate_limit_valkey_url is configured, otherwise fall back to
+#   in-memory limits per worker.
+# memory:
+#   Always keep limits in the current process.
+# valkey:
+#   Require a Valkey or Redis-compatible backend.
+rate_limit_backend = "auto"
+
+# Valkey or Redis connection URL used when the rate limiter should be shared.
+#
+# Example for the bundled demo stack: redis://valkey:6379/1
+# Leave this empty when you want in-memory limits or when auto should stay local.
+rate_limit_valkey_url = ""
+
+# Prefix used for rate-limit keys in Valkey.
+#
+# Change this only when multiple deployments share the same Valkey instance and
+# need isolated key namespaces.
+rate_limit_valkey_prefix = "gatekeeper:rl"
+
+# Soft upper bound for in-memory rate-limit buckets per worker process.
+#
+# This limit helps cap memory usage when the in-process backend is active.
+rate_limit_max_entries = 10000
+
+# Browser-facing base URL of the CAP instance.
+#
+# The challenge page loads widget assets and browser-side CAP requests from this
+# origin. For the bundled HTTPS demo stack, this is https://localhost:8443/cap.
+cap_public_base_url = "https://localhost:8443/cap"
+
+# Optional internal CAP base URL used by the Flask server for /siteverify.
+#
+# Leave this blank to reuse cap_public_base_url. In containerized local demo
+# setups, this is often http://cap:3000 so the gatekeeper can reach the CAP
+# container by service name.
+cap_internal_base_url = "http://cap:3000"
+
+# Optional asset host override for widget.js and cap_wasm.js.
+#
+# Leave this blank to reuse cap_public_base_url. Only set this when assets are
+# deliberately served from a different host or path than the browser API.
+cap_asset_base_url = ""
+
+# Public site key created in the CAP dashboard.
+#
+# This value is safe to send to browsers and identifies which CAP site config
+# should be used for the challenge.
+cap_site_key = ""
+
+# Secret key paired with cap_site_key.
+#
+# The gatekeeper sends this only to CAP's server-side /siteverify endpoint.
+# Treat it like any other server secret and do not expose it to browsers.
+cap_secret_key = ""
+
+# Timeout for the server-side POST /siteverify request, in seconds.
+#
+# Increase this only if your CAP deployment is known to respond slowly. Keeping
+# it short helps fail closed when the external verifier is unavailable.
+cap_verify_timeout_seconds = 5
+
+# Browser-facing hCaptcha script URL.
+#
+# The default explicit-render setup works for most deployments.
+hcaptcha_script_url = "https://js.hcaptcha.com/1/api.js?render=explicit"
+
+# Public site key created in the hCaptcha dashboard.
+hcaptcha_site_key = ""
+
+# Secret key paired with hcaptcha_site_key.
+#
+# The gatekeeper sends this only to hCaptcha's server-side /siteverify endpoint.
+hcaptcha_secret_key = ""
+
+# Server-side hCaptcha verification endpoint.
+hcaptcha_verify_url = "https://api.hcaptcha.com/siteverify"
+
+# Timeout for the server-side hCaptcha siteverify request.
+hcaptcha_verify_timeout_seconds = 5
+
+# Optional browser-facing ALTCHA v3 widget script URL override.
+# Leave this blank to use the gatekeeper-hosted bundled widget below the active
+# path_prefix, or set an absolute URL if you deliberately want an external host.
+altcha_script_url = ""
+
+# HMAC secret used to sign and verify generated ALTCHA challenges.
+altcha_hmac_secret = ""
+
+# Optional separate signing secret for ALTCHA's fast verification path.
+# Leave this blank to fall back to altcha_hmac_secret.
+altcha_hmac_key_secret = ""
+
+# ALTCHA proof-of-work algorithm and challenge settings.
+altcha_algorithm = "PBKDF2/SHA-256"
+altcha_challenge_cost = 5000
+altcha_expires_seconds = 300
+
+################################################################################
+#
+# Demo-ready per-website overrides matched by request host.
+#
+# If a request host matches one of the listed domains, the gatekeeper uses the
+# overrides below on top of the shared defaults from [gatekeeper]. Requests that
+# do not match any [[website]] entry keep using the shared defaults.
+#
+# These overrides are TOML-only. GATEKEEPER_* environment variables never create
+# or modify individual [[website]] entries.
+#
+# The following keys stay global and must remain under [gatekeeper]:
+# trusted_proxy_hops, trusted_proxy_cidrs, log_level, rate_limit_backend,
+# rate_limit_valkey_url, rate_limit_valkey_prefix, rate_limit_max_entries
+#
+# When you override path_prefix here, keep the reverse-proxy routes for the same
+# host aligned with that prefix.
+
+[[website]]
+domains = ["cap.localhost"]
+path_prefix = "/cap-check"
+footer_html.en = 'Cap demo powered by <strong>cryMG</strong>'
+footer_html.de = 'Cap-Demo powered by <strong>cryMG</strong>'
+cap_site_key = "other-cap-site-key"
+cap_secret_key = "other-cap-secret-key"
+# skip_routes = ["GET=^/assets/", "POST=^/api/"]
+
+[[website]]
+domains = ["dummy.localhost"]
+verification_mode = "dummy"
+path_prefix = "/dummy-check"
+footer_html.en = 'Dummy demo powered by <strong>cryMG</strong>'
+footer_html.de = 'Dummy-Demo powered by <strong>cryMG</strong>'
+
+[[website]]
+domains = ["full.localhost"]
+verification_mode = "dummy"
+path_prefix = "/full-check"
+footer_html.en = 'Fully protected demo powered by <strong>cryMG</strong>'
+footer_html.de = 'Vollstaendig geschützte Demo powered by <strong>cryMG</strong>'
+skip_routes = []
+
+[[website]]
+domains = ["hcaptcha.localhost"]
+verification_mode = "hcaptcha"
+path_prefix = "/hcaptcha-check"
+footer_html.en = 'hCaptcha demo powered by <strong>cryMG</strong>'
+footer_html.de = 'hCaptcha-Demo powered by <strong>cryMG</strong>'
+hcaptcha_site_key = "your-hcaptcha-site-key"
+hcaptcha_secret_key = "your-hcaptcha-secret-key"
+# hCaptcha Test Keys (https://docs.hcaptcha.com/#test-key-set-publisher-or-pro-account)
+# hcaptcha_site_key = "10000000-ffff-ffff-ffff-000000000001"
+# hcaptcha_secret_key = "0x0000000000000000000000000000000000000000"
+
+[[website]]
+domains = ["altcha.localhost"]
+verification_mode = "altcha"
+path_prefix = "/altcha-check"
+footer_html.en = 'ALTCHA demo powered by <strong>cryMG</strong>'
+footer_html.de = 'ALTCHA-Demo powered by <strong>cryMG</strong>'
+altcha_hmac_secret = "your-altcha-hmac-secret"
+# altcha_hmac_key_secret = "your-altcha-hmac-key-secret"
+# altcha_algorithm = "PBKDF2/SHA-256"

@@ -1,0 +1,71 @@
+# Local end-to-end example stack for Gatekeeper.
+#
+# Before the first start:
+# 1. Copy config.example.toml to config.toml and adjust the values for your local setup.
+# 2. Generate nginx/certs/demo.crt and nginx/certs/demo.key from nginx/demo-cert.cnf.
+# 3. Optionally set GATEKEEPER_CAP_ADMIN_KEY in .env if you want a custom local CAP admin key.
+#
+# Gatekeeper itself stays internal to the Compose network and is reached only via nginx.
+services:
+  gatekeeper:
+    # The example stack prefers TOML configuration, so Gatekeeper reads ./config.toml directly.
+    build:
+      context: .
+    # For production usage prefer using the image from GitHub Container Registry instead of building locally:
+    #image: ghcr.io/crymg/gatekeeper:latest
+    # Depending on your local setup, you might want to expose Gatekeeper to the host.
+    #ports:
+    #  - "127.0.0.1:5000:5000"
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    restart: unless-stopped
+
+  demo-backend:
+    # Fake protected upstream used to exercise auth_request and skip_routes locally.
+    build:
+      context: .
+      dockerfile: examples/demo-backend/Dockerfile
+    restart: unless-stopped
+
+  cap:
+    # Local CAP instance used only for the checked-in example stack.
+    image: tiago2/cap:3
+    environment:
+      ADMIN_KEY: ${GATEKEEPER_CAP_ADMIN_KEY:-change-this-admin-key-with-at-least-32-characters}
+      REDIS_URL: redis://valkey:6379
+      ENABLE_ASSETS_SERVER: "true"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  valkey:
+    # Shared rate-limit backend for the example stack.
+    image: valkey/valkey:9-alpine
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory-policy noeviction
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  nginx:
+    # Public entry point for the local example stack, including TLS termination and CAP proxying.
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8443:443"
+    volumes:
+      - ./nginx/nginx.demo.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - gatekeeper
+      - demo-backend
+      - cap
+    restart: unless-stopped
+
+volumes:
+  valkey-data:

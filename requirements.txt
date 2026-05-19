@@ -1,0 +1,7 @@
+## Runtime dependencies for Gatekeeper.
+## For local development and CI quality tools, install requirements-dev.txt instead.
+
+Flask>=3.1,<4.0
+gunicorn>=23.0,<24.0
+redis>=5.0,<6.0
+altcha>=2.0,<3.0

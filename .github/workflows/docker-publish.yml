@@ -1,0 +1,209 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *'
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish to GHCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve image tags
+        id: metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
+          echo "vcs_ref=$SHA" >> "$GITHUB_OUTPUT"
+
+          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if git tag --points-at HEAD | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=Nightly build skipped because the selected commit already has a version tag." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            {
+              echo "publish=true"
+              echo "version=nightly"
+              echo "tags<<EOF"
+              echo "$image:nightly"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          tag="$REF_NAME"
+
+          if [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+
+            {
+              echo "publish=true"
+              echo "version=$tag"
+              echo "tags<<EOF"
+              echo "$image:$tag"
+              echo "$image:v$major.$minor"
+              echo "$image:v$major"
+              echo "$image:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-[0-9A-Za-z.-]+$ ]]; then
+            {
+              echo "publish=true"
+              echo "version=$tag"
+              echo "tags<<EOF"
+              echo "$image:$tag"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Unsupported tag format: $tag" >&2
+          exit 1
+
+      - name: Show resolved Docker tags
+        if: steps.metadata.outputs.publish == 'true'
+        run: printf '%s\n' "${{ steps.metadata.outputs.tags }}"
+
+      - name: Require successful tests workflow
+        id: tests_guard
+        if: steps.metadata.outputs.publish == 'true'
+        uses: actions/github-script@v9
+        env:
+          TARGET_SHA: ${{ steps.metadata.outputs.vcs_ref }}
+        with:
+          script: |
+            const targetSha = process.env.TARGET_SHA;
+            const pendingStatuses = new Set(['queued', 'in_progress', 'requested', 'waiting', 'pending']);
+            const maxAttempts = 30;
+            const delayMs = 10000;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'tests.yml',
+                head_sha: targetSha,
+                per_page: 20,
+              });
+
+              const runs = data.workflow_runs;
+              const successfulRun = runs.find((run) => run.status === 'completed' && run.conclusion === 'success');
+
+              if (successfulRun) {
+                core.setOutput('publish', 'true');
+                return;
+              }
+
+              const pendingRun = runs.find((run) => pendingStatuses.has(run.status));
+
+              if (!pendingRun) {
+                const completedRun = runs.find((run) => run.status === 'completed');
+                const reason = completedRun
+                  ? `Publish skipped because tests workflow has no successful run for commit ${targetSha}. Latest conclusion: ${completedRun.conclusion}.`
+                  : `Publish skipped because no tests workflow run was found for commit ${targetSha}.`;
+                core.setOutput('publish', 'false');
+                core.setOutput('reason', reason);
+                return;
+              }
+
+              core.info(`Waiting for tests workflow on ${targetSha} to complete successfully (${attempt}/${maxAttempts}).`);
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+
+            core.setOutput('publish', 'false');
+            core.setOutput('reason', `Publish skipped because tests workflow did not complete successfully for commit ${targetSha} within ${maxAttempts * delayMs / 1000} seconds.`);
+
+      - name: Log in to GitHub Container Registry
+        if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Skip existing nightly commit
+        id: nightly_guard
+        if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false' && steps.metadata.outputs.version == 'nightly'
+        env:
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          SHA: ${{ steps.metadata.outputs.vcs_ref }}
+        run: |
+          set -euo pipefail
+
+          existing_revision="$(docker buildx imagetools inspect --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE:nightly" 2>/dev/null || true)"
+
+          if [[ "$existing_revision" == "$SHA" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Nightly build skipped because $IMAGE:nightly already points to this commit." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false' && steps.nightly_guard.outputs.publish != 'false'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          annotations: |
+            manifest:org.opencontainers.image.description=Protect websites from bots and automated abuse with a simple human check.
+            manifest:org.opencontainers.image.source=https://github.com/cryMG/gatekeeper
+            manifest:org.opencontainers.image.licenses=MIT
+            index:org.opencontainers.image.description=Protect websites from bots and automated abuse with a simple human check.
+            index:org.opencontainers.image.source=https://github.com/cryMG/gatekeeper
+            index:org.opencontainers.image.licenses=MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.metadata.outputs.version }}
+            VCS_REF=${{ steps.metadata.outputs.vcs_ref }}
+            BUILD_DATE=${{ steps.metadata.outputs.build_date }}
+
+      - name: Show skip reason
+        if: steps.metadata.outputs.publish != 'true'
+        run: echo "${{ steps.metadata.outputs.reason }}"
+
+      - name: Show tests skip reason
+        if: steps.tests_guard.outputs.publish == 'false'
+        run: echo "${{ steps.tests_guard.outputs.reason }}"
+
+      - name: Show nightly skip reason
+        if: steps.nightly_guard.outputs.publish == 'false'
+        run: echo "${{ steps.nightly_guard.outputs.reason }}"
