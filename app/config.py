@@ -952,7 +952,7 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
     path_prefix=path_prefix,
     blocked_return_prefixes=(
       path_prefix,
-      "/_human_check",
+      "/_gatekeeper_check",
     ),
   )
 
