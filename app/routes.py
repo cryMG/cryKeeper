@@ -170,7 +170,7 @@ def verify() -> Response:
     settings.cookie_ttl_seconds,
     client_binding=_client_binding_value(settings.cookie_binding_mode),
   )
-  response = redirect(return_path, code=HTTPStatus.FOUND)
+  response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
   _set_verification_cookie(response, settings, token)
   response.headers["Cache-Control"] = "no-store"
   log_message = {
@@ -229,7 +229,7 @@ def clear() -> Response:
     settings.max_return_path_length,
   )
 
-  response = redirect(return_path, code=HTTPStatus.FOUND)
+  response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
   _clear_verification_cookie(response, settings)
   response.headers["Cache-Control"] = "no-store"
   current_app.logger.info(
