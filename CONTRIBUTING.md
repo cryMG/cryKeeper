@@ -74,6 +74,31 @@ For development, these files are the most important entry points:
 - [config.example.toml](config.example.toml): reference configuration
 - [nginx/nginx.demo.conf](nginx/nginx.demo.conf): working nginx auth_request example used by the demo stack
 
+## Release Process
+
+When you're ready to release a new version of cryKeeper, please follow these steps:
+
+1. Update the [CHANGELOG.md](CHANGELOG.md) file with the changes for the new version. Follow the format used in previous entries, and make sure to include a section for the new version (exact version string) with a release date.
+2. Push your changes to the main branch or create a pull request to merge your changes into the main branch.
+3. Check that all tests running on CI are passing.
+4. Create a new Git tag for the release using the version string you used in the CHANGELOG.md. For example: `v1.2.3` for releases or `v1.2.3-beta.0` for pre-releases.
+5. Push the Git tag to the remote repository.
+
+After the tag is pushed, GitHub Actions will automatically build and publish the new release based on the tag. You can verify that the release has been published by checking the "Releases" section of the GitHub repository.
+
+## GitHub Container Registry
+
+GitHub Actions publishes container images to `ghcr.io/crymg/crykeeper`.
+The publish workflow writes the package description, source URL, and license both as OCI labels in the image and as OCI manifest annotations so the GitHub package UI can display them reliably.
+Published tags are multi-architecture manifests for `linux/amd64` and `linux/arm64`.
+
+- A Git tag in the form `vX.Y.Z` publishes the tags `vX.Y.Z`, `vX.Y`, `vX`, and `latest`, then creates the matching GitHub release from the corresponding `CHANGELOG.md` section.
+- A prerelease tag in the form `vX.Y.Z-suffix` publishes only the exact tag, creates a GitHub prerelease from the matching `CHANGELOG.md` section, and never updates `latest`.
+- A tagged release only proceeds when the workflow in [.github/workflows/tests.yml](.github/workflows/tests.yml) has a successful run for the same commit.
+- Before a tagged release build starts, `CHANGELOG.md` must contain a non-empty section whose heading starts with `## [<tag>]`, for example `## [v1.2.3] - 2026-05-28`.
+- A nightly build publishes the `nightly` tag once per day at 01:00 UTC from the current default-branch commit, as long as that commit does not already carry a version tag, the tests workflow succeeded for that commit, and `nightly` is not already pointing at an image built from that same commit.
+- The same nightly publication can also be started manually via the GitHub Actions `workflow_dispatch` trigger for the selected ref.
+
 ## AI usage
 
 AI tools can be used to assist with code generation, refactoring, and documentation. However, please ensure that any AI-generated code is reviewed and tested thoroughly before being included in the project.

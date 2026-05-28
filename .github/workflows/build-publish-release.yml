@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+name: Build, Publish and Release
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -51,6 +51,8 @@ jobs:
 
             {
               echo "publish=true"
+              echo "github_release=false"
+              echo "prerelease=false"
               echo "version=nightly"
               echo "tags<<EOF"
               echo "$image:nightly"
@@ -67,6 +69,8 @@ jobs:
 
             {
               echo "publish=true"
+              echo "github_release=true"
+              echo "prerelease=false"
               echo "version=$tag"
               echo "tags<<EOF"
               echo "$image:$tag"
@@ -81,6 +85,8 @@ jobs:
           if [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-[0-9A-Za-z.-]+$ ]]; then
             {
               echo "publish=true"
+              echo "github_release=true"
+              echo "prerelease=true"
               echo "version=$tag"
               echo "tags<<EOF"
               echo "$image:$tag"
@@ -145,6 +151,32 @@ jobs:
             core.setOutput('publish', 'false');
             core.setOutput('reason', `Publish skipped because tests workflow did not complete successfully for commit ${targetSha} within ${maxAttempts * delayMs / 1000} seconds.`);
 
+      - name: Validate changelog and extract release notes
+        id: changelog
+        if: steps.metadata.outputs.github_release == 'true' && steps.tests_guard.outputs.publish != 'false'
+        env:
+          TAG: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          release_notes_path="$RUNNER_TEMP/release-notes.md"
+          start_line="$(awk -v tag="$TAG" 'index($0, "## [" tag "]") == 1 { print NR; exit }' CHANGELOG.md)"
+
+          if [[ -z "$start_line" ]]; then
+            echo "CHANGELOG.md must contain a section header starting with '## [$TAG]'." >&2
+            exit 1
+          fi
+
+          end_line="$(awk -v start="$start_line" 'NR > start && /^## \[/ { print NR - 1; found = 1; exit } END { if (!found) print NR }' CHANGELOG.md)"
+          sed -n "${start_line},${end_line}p" CHANGELOG.md > "$release_notes_path"
+
+          if ! tail -n +2 "$release_notes_path" | grep -q '[^[:space:]]'; then
+            echo "CHANGELOG.md section for $TAG must not be empty." >&2
+            exit 1
+          fi
+
+          echo "notes_path=$release_notes_path" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false'
         uses: docker/login-action@v4
@@ -203,6 +235,58 @@ jobs:
             VERSION=${{ steps.metadata.outputs.version }}
             VCS_REF=${{ steps.metadata.outputs.vcs_ref }}
             BUILD_DATE=${{ steps.metadata.outputs.build_date }}
+
+      - name: Create or update GitHub release
+        if: steps.metadata.outputs.github_release == 'true' && steps.tests_guard.outputs.publish != 'false' && steps.nightly_guard.outputs.publish != 'false'
+        uses: actions/github-script@v9
+        env:
+          TAG: ${{ steps.metadata.outputs.version }}
+          NOTES_PATH: ${{ steps.changelog.outputs.notes_path }}
+          PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        with:
+          script: |
+            const fs = require('node:fs');
+
+            const tag = process.env.TAG;
+            const body = fs.readFileSync(process.env.NOTES_PATH, 'utf8').trim();
+            const prerelease = process.env.PRERELEASE === 'true';
+
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                name: tag,
+                body,
+                prerelease,
+                draft: false,
+              });
+
+              core.info(`Updated GitHub release for ${tag}.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              body,
+              prerelease,
+              draft: false,
+            });
+
+            core.info(`Created GitHub release for ${tag}.`);
 
       - name: Show skip reason
         if: steps.metadata.outputs.publish != 'true'

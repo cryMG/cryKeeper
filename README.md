@@ -118,6 +118,15 @@ The Docker image starts Gunicorn with 2 workers and 4 threads by default. You ca
 
 These two variables affect only the container's Gunicorn process. They are separate from the cryKeeper application settings and are not part of the TOML and `CRYKEEPER_*` config precedence described below.
 
+### Available Docker Images
+
+Docker images are published to `ghcr.io/crymg/crykeeper`.
+Published tags are multi-architecture manifests for `linux/amd64` and `linux/arm64`.
+
+The `latest` tag always points to the most recent stable release, which is a Git tag in the form `vX.Y.Z` without any pre-release suffix. The `nightly` tag points to the latest build from the default branch that does not carry a version tag.
+
+You may also pull specific version tags such as `v1.2.3`, `v1.2`, or `v1` to get a specific release or the latest patch release in a minor or major series.
+
 ## Reverse Proxy Integration
 
 cryKeeper is intended to be called by nginx via `auth_request`. A minimal setup looks like this:
@@ -380,18 +389,6 @@ Then open:
 - `https://altcha.localhost:8443/protected/`
 - `https://hcaptcha.localhost:8443/protected/`
 - `https://localhost:8443/protected/skip-route/`
-
-## GitHub Container Registry
-
-GitHub Actions publishes container images to `ghcr.io/crymg/crykeeper`.
-The publish workflow writes the package description, source URL, and license both as OCI labels in the image and as OCI manifest annotations so the GitHub package UI can display them reliably.
-Published tags are multi-architecture manifests for `linux/amd64` and `linux/arm64`.
-
-- A Git tag in the form `vX.Y.Z` publishes the tags `vX.Y.Z`, `vX.Y`, `vX`, and `latest`
-- A prerelease tag in the form `vX.Y.Z-suffix` publishes only the exact tag and never `latest`
-- A publish run only proceeds when the workflow in [.github/workflows/tests.yml](.github/workflows/tests.yml) has a successful run for the same commit
-- A nightly build publishes the `nightly` tag once per day at 01:00 UTC from the current default-branch commit, as long as that commit does not already carry a version tag, the tests workflow succeeded for that commit, and `nightly` is not already pointing at an image built from that same commit
-- The same nightly publication can also be started manually via the GitHub Actions `workflow_dispatch` trigger for the selected ref
 
 ## Troubleshooting
 
