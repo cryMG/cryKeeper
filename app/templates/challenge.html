@@ -270,6 +270,9 @@
     <p class="eyebrow">{{ translations.eyebrow }}</p>
     <h1>{{ translations.headline }}</h1>
     <p>{{ translations.body }}</p>
+    <noscript>
+      <p class="error">JavaScript muss im Browser aktiviert sein, um die verifizierung durchzuführen!</p>
+    </noscript>
     {% if error_message %}
     <p class="error">{{ error_message }}</p>
     {% endif %}
