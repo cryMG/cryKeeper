@@ -373,37 +373,6 @@ Then open:
 - `https://hcaptcha.localhost:8443/protected/`
 - `https://localhost:8443/protected/skip-route/`
 
-## Developer Setup
-
-Python package files:
-
-- [requirements.txt](requirements.txt) contains the runtime dependencies
-- [requirements-dev.txt](requirements-dev.txt) extends it with development tools such as Ruff and Bandit
-
-The following developer commands assume a local virtual environment with the dev dependencies installed:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-```
-
-If you build the Docker image directly during development or release automation, the Dockerfile also accepts optional build arguments for OCI image metadata:
-
-- `VERSION`: image version string. Defaults to `dev`.
-- `VCS_REF`: source revision, typically the Git commit SHA.
-- `BUILD_DATE`: image creation timestamp, typically in UTC RFC 3339 format.
-
-Example:
-
-```bash
-docker build \
-  --build-arg VERSION="$(git describe --tags --always 2>/dev/null || echo dev)" \
-  --build-arg VCS_REF="$(git rev-parse HEAD)" \
-  --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -t crykeeper:latest .
-```
-
 ## GitHub Container Registry
 
 GitHub Actions publishes container images to `ghcr.io/crymg/crykeeper`.
@@ -415,40 +384,6 @@ Published tags are multi-architecture manifests for `linux/amd64` and `linux/arm
 - A publish run only proceeds when the workflow in [.github/workflows/tests.yml](.github/workflows/tests.yml) has a successful run for the same commit
 - A nightly build publishes the `nightly` tag once per day at 01:00 UTC from the current default-branch commit, as long as that commit does not already carry a version tag, the tests workflow succeeded for that commit, and `nightly` is not already pointing at an image built from that same commit
 - The same nightly publication can also be started manually via the GitHub Actions `workflow_dispatch` trigger for the selected ref
-
-## Local Python Tests
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-To run a single test module:
-
-```bash
-python -m unittest discover -s tests -p "test_security_hardening.py" -v
-```
-
-## Local Ruff and Bandit
-
-Ruff and Bandit use the shared configuration in [pyproject.toml](pyproject.toml).
-
-```bash
-ruff check .
-ruff format .
-bandit -c pyproject.toml -r . -q
-```
-
-## Repository Layout
-
-For development, these files are the most important entry points:
-
-- [app/config.py](app/config.py): shared config loading, TOML parsing, per-host overrides
-- [app/routes.py](app/routes.py): check, challenge, verify, clear, healthz
-- [app/cookies.py](app/cookies.py): stateless signed verification cookies
-- [app/i18n.py](app/i18n.py): language discovery and translation fallback
-- [app/ratelimit.py](app/ratelimit.py): in-memory and Valkey-backed rate limiting
-- [config.example.toml](config.example.toml): reference configuration
-- [nginx/nginx.demo.conf](nginx/nginx.demo.conf): working nginx auth_request example used by the demo stack
 
 ## Troubleshooting
 
