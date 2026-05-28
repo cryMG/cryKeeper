@@ -1,13 +1,17 @@
 # 🛡️ cryKeeper
 
-**The open-source human verification service for Nginx making bots cry.**
+**The open-source human verification service for nginx making bots cry.**
 
-cryKeeper is a lightweight, Python-powered security container designed to protect your web applications from automated bots, scrapers, and credential stuffing. Utilizing Nginx's native `auth_request` module, it intercepts malicious traffic before it ever touches your backend.
+> [!NOTE]
+> **cryKepper** is currently in early development.  
+> Anything can change, and there are no guarantees about stability, security, or data integrity. Use with caution and always test thoroughly before deploying in production.
+
+cryKeeper is a lightweight, Python-powered security container designed to protect your web applications from automated bots, scrapers, and credential stuffing. Utilizing nginx's native `auth_request` module, it intercepts malicious traffic before it ever touches your backend.
 
 **Why cryKeeper?**
 
 - Open Source: Fully transparent, with no hidden dependencies.
-- Zero Backend Overhead: Bots are rejected directly at the Nginx level.
+- Zero Backend Overhead: Bots are rejected directly at the nginx level.
 - Docker-Ready: Deploy in seconds via `docker-compose`.
 - Language Agnostic: Works flawlessly whether your app is as static website or built in Node.js, PHP, Go, Python or any other language.
 

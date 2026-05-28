@@ -191,10 +191,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.metadata.outputs.tags }}
           annotations: |
-            manifest:org.opencontainers.image.description=The open-source human verification service for Nginx making bots cry
+            manifest:org.opencontainers.image.description=The open-source human verification service for nginx making bots cry
             manifest:org.opencontainers.image.source=https://github.com/cryMG/cryKeeper
             manifest:org.opencontainers.image.licenses=MIT
-            index:org.opencontainers.image.description=The open-source human verification service for Nginx making bots cry
+            index:org.opencontainers.image.description=The open-source human verification service for nginx making bots cry
             index:org.opencontainers.image.source=https://github.com/cryMG/cryKeeper
             index:org.opencontainers.image.licenses=MIT
           cache-from: type=gha

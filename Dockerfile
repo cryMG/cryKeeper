@@ -5,7 +5,7 @@ ARG VCS_REF=
 ARG BUILD_DATE=
 
 LABEL org.opencontainers.image.title="cryKeeper" \
-    org.opencontainers.image.description="The open-source human verification service for Nginx making bots cry" \
+    org.opencontainers.image.description="The open-source human verification service for nginx making bots cry" \
     org.opencontainers.image.url="https://github.com/cryMG/cryKeeper" \
     org.opencontainers.image.documentation="https://github.com/cryMG/cryKeeper/blob/main/README.md" \
     org.opencontainers.image.source="https://github.com/cryMG/cryKeeper" \
