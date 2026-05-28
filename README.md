@@ -51,7 +51,9 @@ By default, **cryKeeper** focuses strictly on verifying human behavior. This mea
 
 cryKeeper supports four verification modes. They all use the same stateless cookie flow, but differ in external dependencies, operations, and user experience.
 
-*Cap* is the recommended mode for most production deployments and is the most tested option in this repository.
+> [!TIP]
+> *Cap* is the recommended mode for most production deployments and is the most tested option in this project.  
+> Because Cap does significantly more than a simple CAPTCHA, it provides a better user experience and stronger bot protection than the other modes. It is also self-hosted, so you can run it in the same private network without mandatory third-party dependencies.
 
 | Mode | External dependency | Typical use | Notes |
 | --- | --- | --- | --- |
