@@ -13,12 +13,12 @@ cryKeeper is a lightweight, Python-powered security container designed to protec
 
 ![Challenge page example](docs/challenge-page.png)
 
-> [!IMPORTANT] Important Note: Good Bots vs. Bad Bots
->
->By default, **cryKeeper** focuses strictly on verifying human behavior. This means that *good bots* (like Googlebot, Bingbot, or uptime monitors) will also be blocked or challenged because they cannot pass human verification.
->
-> - *If your site relies on SEO (Google Indexing):* You should whitelist known search engine IP ranges or user agents in your Nginx configuration before the request hits cryKeeper.
-> - *If your site is a private app (Nextcloud, Bitwarden, internal tools):* This is actually a feature! It keeps your private instances completely hidden from any search engine or automated scanner.
+## ⚠️ Important Note: Good Bots vs. Bad Bots ⚠️
+
+By default, **cryKeeper** focuses strictly on verifying human behavior. This means that *good bots* (like Googlebot, Bingbot, or uptime monitors) will also be blocked or challenged because they cannot pass human verification.
+
+- *If your site relies on SEO (Google Indexing):* You should whitelist known search engine IP ranges or user agents in your Nginx configuration before the request hits cryKeeper.
+- *If your site is a private app (Nextcloud, Bitwarden, internal tools):* This is actually a feature! It keeps your private instances completely hidden from any search engine or automated scanner.
 
 ## Features
 
