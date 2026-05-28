@@ -470,6 +470,17 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertEqual(302, response.status_code)
     self.assertEqual("/", response.headers["Location"])
 
+  def test_clear_endpoint_replaces_backslash_return_path_with_root(self):
+    app = self._create_app()
+    response = app.test_client().get(
+      "/crykeeper/clear",
+      base_url="http://localhost",
+      query_string={"return": "/\\evil.com"},
+    )
+
+    self.assertEqual(302, response.status_code)
+    self.assertEqual("/", response.headers["Location"])
+
   def test_auth_redirect_replaces_blocked_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().get(
@@ -502,6 +513,18 @@ class CryKeeperHardeningTests(unittest.TestCase):
       "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/crykeeper%2Fchallenge?return=/ok"},
+      headers={"User-Agent": "UA"},
+    )
+
+    self.assertEqual(302, response.status_code)
+    self.assertEqual("/", response.headers["Location"])
+
+  def test_verify_replaces_percent_encoded_backslash_return_path_with_root(self):
+    app = self._create_app()
+    response = app.test_client().post(
+      "/crykeeper/verify",
+      base_url="http://localhost",
+      data={"return": "/%5Cevil.com"},
       headers={"User-Agent": "UA"},
     )
 

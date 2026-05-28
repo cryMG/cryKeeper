@@ -24,6 +24,10 @@ def normalize_return_path(
     return fallback
 
   decoded_path = _fully_unquote_path(parsed.path)
+  # Browsers may treat backslashes as forward slashes, so /\evil.com can become //evil.com.
+  if "\\" in parsed.path or "\\" in decoded_path:
+    return fallback
+
   if not decoded_path.startswith("/") or decoded_path.startswith("//"):
     return fallback
 
