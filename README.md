@@ -2,6 +2,10 @@
 
 **The open-source human verification service for nginx making bots cry.**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?style=flat-square&logo=docker&logoColor=white)](https://github.com/cryMG/cryKeeper/pkgs/container/crykeeper)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cryMG/cryKeeper/tests.yml?branch=main&style=flat-square&label=tests&color=success)](https://github.com/cryMG/cryKeeper/actions)
+
 > [!NOTE]
 > **cryKepper** is currently in early development.  
 > Anything can change, and there are no guarantees about stability, security, or data integrity. Use with caution and always test thoroughly before deploying in production.
