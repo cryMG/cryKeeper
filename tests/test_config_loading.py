@@ -19,7 +19,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 human_cookie_name = "__Host-file-cookie"
                 human_cookie_ttl_seconds = 123
@@ -64,7 +64,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         settings = load_settings()
 
     self.assertEqual("file-secret", settings.secret_key)
@@ -141,7 +141,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 human_cookie_ttl_seconds = 321
                 human_cookie_secure = true
@@ -156,14 +156,14 @@ class ConfigLoadingTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_SECRET_KEY": "env-secret",
-          "GATEKEEPER_HUMAN_COOKIE_SECURE": "false",
-          "GATEKEEPER_FOOTER_HTML": "from <strong>env</strong>",
-          "GATEKEEPER_SKIP_ROUTES": "GET=^/assets/,POST=^/api/",
-          "GATEKEEPER_TRUSTED_PROXY_CIDRS": "203.0.113.0/24",
-          "GATEKEEPER_RATE_LIMIT_BACKEND": "valkey",
-          "GATEKEEPER_PATH_PREFIX": "/from-env",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_SECRET_KEY": "env-secret",
+          "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
+          "CRYKEEPER_FOOTER_HTML": "from <strong>env</strong>",
+          "CRYKEEPER_SKIP_ROUTES": "GET=^/assets/,POST=^/api/",
+          "CRYKEEPER_TRUSTED_PROXY_CIDRS": "203.0.113.0/24",
+          "CRYKEEPER_RATE_LIMIT_BACKEND": "valkey",
+          "CRYKEEPER_PATH_PREFIX": "/from-env",
         },
         clear=True,
       ):
@@ -186,7 +186,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 human_cookie_secure = true
                 footer_html = "from file"
@@ -199,13 +199,13 @@ class ConfigLoadingTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_SECRET_KEY": "",
-          "GATEKEEPER_HUMAN_COOKIE_SECURE": "   ",
-          "GATEKEEPER_FOOTER_HTML": "",
-          "GATEKEEPER_SKIP_ROUTES": "  ",
-          "GATEKEEPER_RATE_LIMIT_BACKEND": "",
-          "GATEKEEPER_PATH_PREFIX": "",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_SECRET_KEY": "",
+          "CRYKEEPER_HUMAN_COOKIE_SECURE": "   ",
+          "CRYKEEPER_FOOTER_HTML": "",
+          "CRYKEEPER_SKIP_ROUTES": "  ",
+          "CRYKEEPER_RATE_LIMIT_BACKEND": "",
+          "CRYKEEPER_PATH_PREFIX": "",
         },
         clear=True,
       ):
@@ -227,7 +227,7 @@ class ConfigLoadingTests(unittest.TestCase):
 
     self.assertEqual("", settings.altcha_script_url)
     self.assertEqual(
-      "/gatekeeper/static/vendor/altcha.min.js",
+      "/crykeeper/static/vendor/altcha.min.js",
       settings.altcha_effective_script_url,
     )
     self.assertEqual("PBKDF2/SHA-256", settings.altcha_algorithm)
@@ -237,12 +237,12 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 imaginary_setting = true
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(RuntimeError, "unknown keys"):
           load_settings()
 
@@ -251,7 +251,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 path_prefix = "/from-file"
                 footer_html = { en = 'default footer', de = 'standardfuss' }
@@ -272,10 +272,10 @@ class ConfigLoadingTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_SECRET_KEY": "env-secret",
-          "GATEKEEPER_HUMAN_COOKIE_SECURE": "true",
-          "GATEKEEPER_PATH_PREFIX": "/from-env",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_SECRET_KEY": "env-secret",
+          "CRYKEEPER_HUMAN_COOKIE_SECURE": "true",
+          "CRYKEEPER_PATH_PREFIX": "/from-env",
         },
         clear=True,
       ):
@@ -284,7 +284,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("env-secret", settings_bundle.default_settings.secret_key)
     self.assertTrue(settings_bundle.default_settings.cookie_secure)
     self.assertEqual(
-      "__Host-gatekeeper_verified", settings_bundle.default_settings.cookie_name
+      "__Host-crykeeper_verified", settings_bundle.default_settings.cookie_name
     )
     self.assertEqual("/from-env", settings_bundle.default_settings.path_prefix)
 
@@ -294,7 +294,7 @@ class ConfigLoadingTests(unittest.TestCase):
 
     self.assertEqual("website-secret", site_settings.secret_key)
     self.assertFalse(site_settings.cookie_secure)
-    self.assertEqual("gatekeeper_verified", site_settings.cookie_name)
+    self.assertEqual("crykeeper_verified", site_settings.cookie_name)
     self.assertEqual(
       '<a href="/legal">website footer</a>', site_settings.footer_html.resolve("de")
     )
@@ -327,13 +327,13 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 skip_routes = ["GET=(["]
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(RuntimeError, "invalid regex"):
           load_settings()
 
@@ -342,7 +342,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
 
                 [[website]]
@@ -351,7 +351,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(
           RuntimeError, "may not override trusted_proxy_hops"
         ):
@@ -362,7 +362,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
 
                 [[website]]
@@ -371,7 +371,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(
           RuntimeError, "may not override rate_limit_valkey_url"
         ):
@@ -382,7 +382,7 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
 
                 [[website]]
@@ -390,7 +390,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(RuntimeError, "duplicate domain 'one.example.com'"):
           load_settings_bundle()
 
@@ -399,9 +399,9 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
                 footer_html.en = "english footer"
                 footer_html.de = "deutscher footer"
 
@@ -412,7 +412,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         settings_bundle = load_settings_bundle()
 
     default_settings = settings_bundle.default_settings
@@ -428,14 +428,14 @@ class ConfigLoadingTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "file-secret"
                 footer_html.en = "english footer"
                 footer_html.de = "deutscher footer"
                 """,
       )
 
-      with patch.dict(os.environ, {"GATEKEEPER_CONFIG_FILE": config_path}, clear=True):
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         settings = load_settings()
 
     self.assertEqual("deutscher footer", settings.footer_html.resolve("de-AT"))

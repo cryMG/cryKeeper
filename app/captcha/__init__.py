@@ -1,1 +1,1 @@
-"""Provider-specific captcha integrations used by the gatekeeper."""
+"""Provider-specific captcha integrations used by the cryKeeper."""

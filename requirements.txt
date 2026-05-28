@@ -1,4 +1,4 @@
-## Runtime dependencies for Gatekeeper.
+## Runtime dependencies for cryKeeper.
 ## For local development and CI quality tools, install requirements-dev.txt instead.
 
 Flask>=3.1,<4.0

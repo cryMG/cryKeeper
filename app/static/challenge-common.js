@@ -93,5 +93,5 @@
     };
   };
 
-  window.GatekeeperChallenge = { init, parseJson };
+  window.CryKeeperChallenge = { init, parseJson };
 })();

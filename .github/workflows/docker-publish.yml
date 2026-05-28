@@ -34,7 +34,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          owner="$(printf '%s' "$REPOSITORY" | cut -d/ -f1 | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/$owner/crykeeper"
           build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           echo "image=$image" >> "$GITHUB_OUTPUT"
@@ -183,11 +184,11 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           annotations: |
-            manifest:org.opencontainers.image.description=Protect websites from bots and automated abuse with a simple human check.
-            manifest:org.opencontainers.image.source=https://github.com/cryMG/gatekeeper
+            manifest:org.opencontainers.image.description=The open-source human verification service for Nginx making bots cry
+            manifest:org.opencontainers.image.source=https://github.com/cryMG/cryKeeper
             manifest:org.opencontainers.image.licenses=MIT
-            index:org.opencontainers.image.description=Protect websites from bots and automated abuse with a simple human check.
-            index:org.opencontainers.image.source=https://github.com/cryMG/gatekeeper
+            index:org.opencontainers.image.description=The open-source human verification service for Nginx making bots cry
+            index:org.opencontainers.image.source=https://github.com/cryMG/cryKeeper
             index:org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max

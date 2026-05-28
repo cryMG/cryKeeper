@@ -1,19 +1,19 @@
-# Local end-to-end example stack for Gatekeeper.
+# Local end-to-end example stack for cryKeeper.
 #
 # Before the first start:
 # 1. Copy config.example.toml to config.toml and adjust the values for your local setup.
 # 2. Generate nginx/certs/demo.crt and nginx/certs/demo.key from nginx/demo-cert.cnf.
-# 3. Optionally set GATEKEEPER_CAP_ADMIN_KEY in .env if you want a custom local CAP admin key.
+# 3. Optionally set CRYKEEPER_CAP_ADMIN_KEY in .env if you want a custom local CAP admin key.
 #
-# Gatekeeper itself stays internal to the Compose network and is reached only via nginx.
+# cryKeeper itself stays internal to the Compose network and is reached only via nginx.
 services:
-  gatekeeper:
-    # The example stack prefers TOML configuration, so Gatekeeper reads ./config.toml directly.
+  crykeeper:
+    # The example stack prefers TOML configuration, so cryKeeper reads ./config.toml directly.
     build:
       context: .
     # For production usage prefer using the image from GitHub Container Registry instead of building locally:
-    #image: ghcr.io/crymg/gatekeeper:latest
-    # Depending on your local setup, you might want to expose Gatekeeper to the host.
+    #image: ghcr.io/crymg/crykeeper:latest
+    # Depending on your local setup, you might want to expose cryKeeper to the host.
     #ports:
     #  - "127.0.0.1:5000:5000"
     volumes:
@@ -31,7 +31,7 @@ services:
     # Local CAP instance used only for the checked-in example stack.
     image: tiago2/cap:3
     environment:
-      ADMIN_KEY: ${GATEKEEPER_CAP_ADMIN_KEY:-change-this-admin-key-with-at-least-32-characters}
+      ADMIN_KEY: ${CRYKEEPER_CAP_ADMIN_KEY:-change-this-admin-key-with-at-least-32-characters}
       REDIS_URL: redis://valkey:6379
       ENABLE_ASSETS_SERVER: "true"
     depends_on:
@@ -62,7 +62,7 @@ services:
       - ./nginx/nginx.demo.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - gatekeeper
+      - crykeeper
       - demo-backend
       - cap
     restart: unless-stopped

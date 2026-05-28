@@ -96,7 +96,7 @@ return {1, 0}
 
 
 class InMemoryRateLimiter:
-  """Best-effort process-local limiter for public gatekeeper endpoints."""
+  """Best-effort process-local limiter for public crykeeper endpoints."""
 
   def __init__(self, max_entries: int = 10000) -> None:
     self._max_entries = max_entries
@@ -173,9 +173,9 @@ class InMemoryRateLimiter:
 class ValkeyRateLimiter:
   """Distributed rate limiter backed by Valkey/Redis."""
 
-  def __init__(self, client: redis.Redis, key_prefix: str = "gatekeeper:rl") -> None:
+  def __init__(self, client: redis.Redis, key_prefix: str = "crykeeper:rl") -> None:
     self._client = client
-    self._key_prefix = key_prefix.rstrip(":") or "gatekeeper:rl"
+    self._key_prefix = key_prefix.rstrip(":") or "crykeeper:rl"
     self._script = client.register_script(_VALKEY_RATE_LIMIT_SCRIPT)
 
   @classmethod
@@ -275,8 +275,8 @@ class WebsiteRateLimiter:
 
     if not self._valkey_url:
       raise RuntimeError(
-        "GATEKEEPER_RATE_LIMIT_BACKEND=valkey requires GATEKEEPER_RATE_LIMIT_VALKEY_URL "
-        "or shared rate_limit_valkey_url under [gatekeeper]."
+        "CRYKEEPER_RATE_LIMIT_BACKEND=valkey requires CRYKEEPER_RATE_LIMIT_VALKEY_URL "
+        "or shared rate_limit_valkey_url under [crykeeper]."
       )
 
     primary = ValkeyRateLimiter.from_url(self._valkey_url, key_prefix)

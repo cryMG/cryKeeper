@@ -1,6 +1,6 @@
 {
   "page_title": "Security Check",
-  "eyebrow": "Gatekeeper - Security Check",
+  "eyebrow": "cryKeeper - Security Check",
   "headline": "Request verification required",
   "body": "Please wait while access is being verified.",
   "dummy_notice": "Dummy mode is active. Set verification_mode to cap, altcha, or hcaptcha to require a real verification.",

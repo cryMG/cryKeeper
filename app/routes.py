@@ -25,12 +25,12 @@ from .i18n import get_translations
 from .ratelimit import RateLimitRule
 from .security import normalize_return_path
 
-gatekeeper = Blueprint(
-  "gatekeeper", __name__, static_folder="static", static_url_path="/static"
+crykeeper = Blueprint(
+  "crykeeper", __name__, static_folder="static", static_url_path="/static"
 )
 
 
-@gatekeeper.get("/check")
+@crykeeper.get("/check")
 def check() -> tuple[str, int] | Response:
   """Validate the signed cookie for nginx auth_request subrequests."""
   settings = _settings()
@@ -60,9 +60,9 @@ def check() -> tuple[str, int] | Response:
   if payload is not None:
     return "", HTTPStatus.NO_CONTENT
 
-  # nginx reads this header and converts the 401 into a redirect to /gatekeeper/challenge.
+  # nginx reads this header and converts the 401 into a redirect to /crykeeper/challenge.
   response = make_response("", HTTPStatus.UNAUTHORIZED)
-  response.headers["X-Auth-Redirect"] = _gatekeeper_url(
+  response.headers["X-Auth-Redirect"] = _crykeeper_url(
     settings, "/challenge", return_path=return_path
   )
   current_app.logger.info(
@@ -71,7 +71,7 @@ def check() -> tuple[str, int] | Response:
   return response
 
 
-@gatekeeper.get("/challenge")
+@crykeeper.get("/challenge")
 def challenge() -> Response:
   """Render the interstitial page that triggers the active verification provider."""
   settings = _settings()
@@ -92,7 +92,7 @@ def challenge() -> Response:
   return _render_challenge(return_path)
 
 
-@gatekeeper.post("/verify")
+@crykeeper.post("/verify")
 def verify() -> Response:
   """Complete the active provider verification and issue the signed human cookie."""
   settings = _settings()
@@ -154,7 +154,7 @@ def verify() -> Response:
   return response
 
 
-@gatekeeper.get("/altcha/challenge")
+@crykeeper.get("/altcha/challenge")
 def altcha_challenge() -> Response:
   """Return one fresh ALTCHA challenge when ALTCHA mode is active for the host."""
   settings = _settings()
@@ -191,7 +191,7 @@ def altcha_challenge() -> Response:
   return response
 
 
-@gatekeeper.get("/clear")
+@crykeeper.get("/clear")
 def clear() -> Response:
   """Clear the signed human-verification cookie and redirect to a safe local path."""
   settings = _settings()
@@ -210,7 +210,7 @@ def clear() -> Response:
   return response
 
 
-@gatekeeper.get("/healthz")
+@crykeeper.get("/healthz")
 def healthz() -> tuple[str, int]:
   """Return a minimal liveness response for container and proxy health checks."""
   return "ok", HTTPStatus.OK
@@ -241,8 +241,8 @@ def _render_challenge(
       auto_start=not error_key and not rate_limited,
       rate_limited=rate_limited,
       verification_mode=settings.verification_mode,
-      verify_action_url=_gatekeeper_path(settings, "/verify"),
-      challenge_shared_script_url=_gatekeeper_path(
+      verify_action_url=_crykeeper_path(settings, "/verify"),
+      challenge_shared_script_url=_crykeeper_path(
         settings, "/static/challenge-common.js"
       ),
       challenge_runtime_script_url=challenge_context["runtime_script_url"],
@@ -308,7 +308,7 @@ def _rate_limit_response(scope: str, return_path: str) -> Response | None:
 def _rate_limit_decision(scope: str) -> object | None:
   """Return the limiter decision for one public endpoint when a client is blocked."""
   settings = _settings()
-  rate_limiter = current_app.extensions["gatekeeper_rate_limiter"]
+  rate_limiter = current_app.extensions["crykeeper_rate_limiter"]
   decision = rate_limiter.check(
     f"{scope}:{_request_host_name() or 'default'}:{_rate_limit_client_key()}",
     _rate_limit_rule(scope, settings),
@@ -565,7 +565,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_retry_ready",
         "status_reload_ready",
       ),
-      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-cap.js"),
+      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-cap.js"),
       "external_scripts": (
         {
           "src": settings.cap_widget_script_url,
@@ -593,7 +593,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_retry_ready",
         "status_reload_ready",
       ),
-      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-hcaptcha.js"),
+      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-hcaptcha.js"),
       "external_scripts": (
         {
           "src": settings.hcaptcha_script_url,
@@ -619,7 +619,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_altcha_ready",
         "status_retry_ready",
       ),
-      "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-altcha.js"),
+      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-altcha.js"),
       "external_scripts": (
         {
           "src": altcha_script_url,
@@ -629,7 +629,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         },
       ),
       "provider_options": {
-        "challengeUrl": _gatekeeper_path(settings, "/altcha/challenge"),
+        "challengeUrl": _crykeeper_path(settings, "/altcha/challenge"),
       },
       "provider_template": "providers/altcha.html",
       "initial_status_key": "status_altcha_ready",
@@ -640,7 +640,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
       "dummy_progress_running",
       "progress_complete",
     ),
-    "runtime_script_url": _gatekeeper_path(settings, "/static/challenge-dummy.js"),
+    "runtime_script_url": _crykeeper_path(settings, "/static/challenge-dummy.js"),
     "external_scripts": (),
     "provider_options": {},
     "provider_template": "providers/dummy.html",
@@ -693,12 +693,12 @@ def _json_error_response(
   return response
 
 
-def _gatekeeper_path(settings: object, suffix: str) -> str:
-  """Build a gatekeeper-local URL path from the effective per-website prefix."""
+def _crykeeper_path(settings: object, suffix: str) -> str:
+  """Build a crykeeper-local URL path from the effective per-website prefix."""
   return f"{settings.path_prefix}{suffix}"
 
 
-def _gatekeeper_url(settings: object, suffix: str, return_path: str) -> str:
-  """Build a gatekeeper-local URL with query parameters without relying on one endpoint name."""
-  path = _gatekeeper_path(settings, suffix)
+def _crykeeper_url(settings: object, suffix: str, return_path: str) -> str:
+  """Build a crykeeper-local URL with query parameters without relying on one endpoint name."""
+  path = _crykeeper_path(settings, suffix)
   return f"{path}?{urlencode({'return': return_path})}"

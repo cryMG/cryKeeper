@@ -1,5 +1,5 @@
 (() => {
-  const helpers = window.GatekeeperChallenge;
+  const helpers = window.CryKeeperChallenge;
   if (!helpers) {
     return;
   }

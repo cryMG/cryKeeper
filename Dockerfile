@@ -4,11 +4,11 @@ ARG VERSION=dev
 ARG VCS_REF=
 ARG BUILD_DATE=
 
-LABEL org.opencontainers.image.title="Gatekeeper" \
-    org.opencontainers.image.description="Protect websites from bots and automated abuse with a simple human check." \
-    org.opencontainers.image.url="https://github.com/cryMG/gatekeeper" \
-    org.opencontainers.image.documentation="https://github.com/cryMG/gatekeeper/blob/main/README.md" \
-    org.opencontainers.image.source="https://github.com/cryMG/gatekeeper" \
+LABEL org.opencontainers.image.title="cryKeeper" \
+    org.opencontainers.image.description="The open-source human verification service for Nginx making bots cry" \
+    org.opencontainers.image.url="https://github.com/cryMG/cryKeeper" \
+    org.opencontainers.image.documentation="https://github.com/cryMG/cryKeeper/blob/main/README.md" \
+    org.opencontainers.image.source="https://github.com/cryMG/cryKeeper" \
     org.opencontainers.image.vendor="cryeffect Media Group" \
     org.opencontainers.image.authors="Peter Müller <peter@crycode.de>" \
     org.opencontainers.image.licenses="MIT" \
@@ -20,14 +20,14 @@ LABEL org.opencontainers.image.title="Gatekeeper" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    GATEKEEPER_CONFIG_FILE=/app/config.toml \
-    GATEKEEPER_GUNICORN_WORKERS=2 \
-    GATEKEEPER_GUNICORN_THREADS=4
+    CRYKEEPER_CONFIG_FILE=/app/config.toml \
+    CRYKEEPER_GUNICORN_WORKERS=2 \
+    CRYKEEPER_GUNICORN_THREADS=4
 
-RUN groupadd --system gatekeeper \
-    && useradd --system --gid gatekeeper --create-home --home-dir /home/gatekeeper gatekeeper \
+RUN groupadd --system crykeeper \
+    && useradd --system --gid crykeeper --create-home --home-dir /home/crykeeper crykeeper \
     && mkdir -p /app \
-    && chown gatekeeper:gatekeeper /app
+    && chown crykeeper:crykeeper /app
 
 WORKDIR /app
 
@@ -38,8 +38,8 @@ RUN pip install -r /tmp/requirements.txt \
 COPY app ./app
 COPY wsgi.py ./
 
-USER gatekeeper
+USER crykeeper
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:5000 --workers \"${GATEKEEPER_GUNICORN_WORKERS:-2}\" --threads \"${GATEKEEPER_GUNICORN_THREADS:-4}\" --access-logfile - --error-logfile - wsgi:app"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:5000 --workers \"${CRYKEEPER_GUNICORN_WORKERS:-2}\" --threads \"${CRYKEEPER_GUNICORN_THREADS:-4}\" --access-logfile - --error-logfile - wsgi:app"]

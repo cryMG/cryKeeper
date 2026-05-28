@@ -1,6 +1,6 @@
 {
   "page_title": "Sicherheitsprüfung",
-  "eyebrow": "Gatekeeper - Sicherheitsprüfung",
+  "eyebrow": "cryKeeper - Sicherheitsprüfung",
   "headline": "Anfrage muss verifiziert werden",
   "body": "Bitte warte kurz, während der Zugriff geprüft wird.",
   "dummy_progress_running": "Verifizierung wird simuliert",

@@ -53,7 +53,7 @@ def _site_links() -> list[tuple[str, str]]:
 
 
 def _path_prefix_for_host() -> str:
-  """Return the gatekeeper path prefix configured for the current demo host."""
+  """Return the cryKeeper path prefix configured for the current demo host."""
   host = _normalized_host()
   prefixes = {
     "cap.localhost": "/cap-check",
@@ -62,7 +62,7 @@ def _path_prefix_for_host() -> str:
     "hcaptcha.localhost": "/hcaptcha-check",
     "altcha.localhost": "/altcha-check",
   }
-  return prefixes.get(host, "/gatekeeper")
+  return prefixes.get(host, "/crykeeper")
 
 
 def _current_site_links() -> list[tuple[str, str]]:
@@ -115,7 +115,7 @@ def _site_content() -> tuple[str, str, str]:
   if host == "altcha.localhost":
     return (
       "ALTCHA demo",
-      "This dedicated demo host is protected through /altcha-check using ALTCHA with gatekeeper-hosted challenges.",
+      "This dedicated demo host is protected through /altcha-check using ALTCHA with cryKeeper-hosted challenges.",
       "#b45309",
     )
   return (

@@ -8,15 +8,19 @@ from typing import Any, Mapping
 
 from .i18n import DEFAULT_LOCALE, normalize_locale_name
 
-ENV_PREFIX = "GATEKEEPER_"
-DEFAULT_PATH_PREFIX = "/gatekeeper"
+ENV_PREFIX = "CRYKEEPER_"
+DEFAULT_PATH_PREFIX = "/crykeeper"
 DEFAULT_CONFIG_FILE = "/app/config.toml"
 DEFAULT_HCAPTCHA_SCRIPT_URL = "https://js.hcaptcha.com/1/api.js?render=explicit"
 DEFAULT_HCAPTCHA_VERIFY_URL = "https://api.hcaptcha.com/siteverify"
 DEFAULT_ALTCHA_SCRIPT_URL = ""
 DEFAULT_ALTCHA_SCRIPT_PATH = "/static/vendor/altcha.min.js"
 DEFAULT_ALTCHA_ALGORITHM = "PBKDF2/SHA-256"
-CONFIG_TABLE_NAME = "gatekeeper"
+DEFAULT_COOKIE_NAME = "crykeeper_verified"
+DEFAULT_HOST_COOKIE_NAME = "__Host-crykeeper_verified"
+DEFAULT_RATE_LIMIT_VALKEY_PREFIX = "crykeeper:rl"
+INTERNAL_CHECK_PATH = "/_crykeeper_check"
+CONFIG_TABLE_NAME = "crykeeper"
 WEBSITE_TABLE_NAME = "website"
 CONFIGURABLE_ENV_SUFFIXES = (
   "SECRET_KEY",
@@ -93,15 +97,15 @@ def normalize_host_name(value: str | None) -> str:
 
 
 def _env_name(name: str) -> str:
-  """Build the fully qualified environment variable name for one gatekeeper key."""
+  """Build the preferred cryKeeper environment variable name for one setting."""
   return f"{ENV_PREFIX}{name}"
 
 
 def _config_key(name: str) -> str:
-  """Map one gatekeeper environment variable name to its lowercase TOML key."""
-  if not name.startswith(ENV_PREFIX):
-    raise RuntimeError(f"{name} is not a gatekeeper setting.")
-  return name.removeprefix(ENV_PREFIX).lower()
+  """Map one cryKeeper environment variable name to its lowercase TOML key."""
+  if name.startswith(ENV_PREFIX):
+    return name.removeprefix(ENV_PREFIX).lower()
+  raise RuntimeError(f"{name} is not a cryKeeper setting.")
 
 
 def _read_config_file_path() -> Path:
@@ -159,7 +163,7 @@ def _load_config_document() -> ConfigDocument:
 def _load_default_table(
   document: Mapping[str, Any], config_path: Path
 ) -> dict[str, Any]:
-  """Validate and return the shared [gatekeeper] defaults from the TOML document."""
+  """Validate and return the shared [crykeeper] defaults from the TOML document."""
   raw_table = document.get(CONFIG_TABLE_NAME, {})
   if raw_table is None:
     return {}
@@ -418,7 +422,7 @@ def _read_csv_values(config_source: ConfigSource, name: str) -> tuple[str, ...]:
 
 
 def _read_path_prefix(config_source: ConfigSource, name: str, default: str) -> str:
-  """Read and validate the public path prefix reserved for gatekeeper routes."""
+  """Read and validate the public path prefix reserved for cryKeeper routes."""
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
@@ -456,14 +460,14 @@ def _read_cookie_name(config_source: ConfigSource, name: str, secure: bool) -> s
   value = (raw_value or "").strip()
 
   if not value:
-    return "__Host-gatekeeper_verified" if secure else "gatekeeper_verified"
+    return DEFAULT_HOST_COOKIE_NAME if secure else DEFAULT_COOKIE_NAME
 
-  if secure and value == "gatekeeper_verified":
-    return "__Host-gatekeeper_verified"
+  if secure and value == DEFAULT_COOKIE_NAME:
+    return DEFAULT_HOST_COOKIE_NAME
 
   if value.startswith("__Host-") and not secure:
     raise RuntimeError(
-      f"{name} uses a '__Host-' prefix and therefore requires GATEKEEPER_HUMAN_COOKIE_SECURE=true."
+      f"{name} uses a '__Host-' prefix and therefore requires CRYKEEPER_HUMAN_COOKIE_SECURE=true."
     )
 
   return value
@@ -773,7 +777,7 @@ class SettingsBundle:
 
   @property
   def path_prefixes(self) -> tuple[str, ...]:
-    """Return every unique gatekeeper prefix that must be registered at startup."""
+    """Return every unique cryKeeper prefix that must be registered at startup."""
     prefixes = [self.default_settings.path_prefix]
     prefixes.extend(website.settings.path_prefix for website in self.websites)
     return tuple(dict.fromkeys(prefixes))
@@ -936,9 +940,9 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
     rate_limit_valkey_prefix=_read_text(
       config_source,
       _env_name("RATE_LIMIT_VALKEY_PREFIX"),
-      "gatekeeper:rl",
+      DEFAULT_RATE_LIMIT_VALKEY_PREFIX,
     ).strip()
-    or "gatekeeper:rl",
+    or DEFAULT_RATE_LIMIT_VALKEY_PREFIX,
     rate_limit_max_entries=_read_non_negative_int(
       config_source,
       _env_name("RATE_LIMIT_MAX_ENTRIES"),
@@ -952,7 +956,7 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
     path_prefix=path_prefix,
     blocked_return_prefixes=(
       path_prefix,
-      "/_gatekeeper_check",
+      INTERNAL_CHECK_PATH,
     ),
   )
 

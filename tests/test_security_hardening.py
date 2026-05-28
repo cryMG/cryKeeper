@@ -14,7 +14,7 @@ from app.captcha.cap import CapVerificationResult
 from app import create_app
 
 
-class GatekeeperHardeningTests(unittest.TestCase):
+class CryKeeperHardeningTests(unittest.TestCase):
   def _write_config(self, directory: str, contents: str) -> str:
     config_path = Path(directory) / "config.toml"
     config_path.write_text(textwrap.dedent(contents), encoding="utf-8")
@@ -22,10 +22,10 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def _create_app(self, **env_overrides):
     env = {
-      "GATEKEEPER_SECRET_KEY": "test-secret",
-      "GATEKEEPER_VERIFICATION_MODE": "dummy",
-      "GATEKEEPER_HUMAN_COOKIE_SECURE": "false",
-      "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+      "CRYKEEPER_SECRET_KEY": "test-secret",
+      "CRYKEEPER_VERIFICATION_MODE": "dummy",
+      "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
+      "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
     }
     env.update(env_overrides)
 
@@ -35,19 +35,19 @@ class GatekeeperHardeningTests(unittest.TestCase):
   def test_cap_mode_requires_secure_cookie_without_local_override(self):
     with self.assertRaisesRegex(RuntimeError, "ALLOW_INSECURE_LOCAL_CAP"):
       self._create_app(
-        GATEKEEPER_VERIFICATION_MODE="cap",
-        GATEKEEPER_HUMAN_COOKIE_SECURE="false",
-        GATEKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
-        GATEKEEPER_CAP_SITE_KEY="site-key",
-        GATEKEEPER_CAP_SECRET_KEY="secret-key",
+        CRYKEEPER_VERIFICATION_MODE="cap",
+        CRYKEEPER_HUMAN_COOKIE_SECURE="false",
+        CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
+        CRYKEEPER_CAP_SITE_KEY="site-key",
+        CRYKEEPER_CAP_SECRET_KEY="secret-key",
       )
 
   def test_create_app_rejects_default_secret_key(self):
     with patch.dict(
       os.environ,
       {
-        "GATEKEEPER_SECRET_KEY": "change-me-in-production",
-        "GATEKEEPER_VERIFICATION_MODE": "dummy",
+        "CRYKEEPER_SECRET_KEY": "change-me-in-production",
+        "CRYKEEPER_VERIFICATION_MODE": "dummy",
       },
       clear=True,
     ):
@@ -58,9 +58,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
     with patch.dict(
       os.environ,
       {
-        "GATEKEEPER_SECRET_KEY": "test-secret",
-        "GATEKEEPER_VERIFICATION_MODE": "dummy",
-        "GATEKEEPER_TRUSTED_PROXY_HOPS": "1",
+        "CRYKEEPER_SECRET_KEY": "test-secret",
+        "CRYKEEPER_VERIFICATION_MODE": "dummy",
+        "CRYKEEPER_TRUSTED_PROXY_HOPS": "1",
       },
       clear=True,
     ):
@@ -69,22 +69,22 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_cap_mode_allows_explicit_local_http_override(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="cap",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="false",
-      GATEKEEPER_ALLOW_INSECURE_LOCAL_CAP="true",
-      GATEKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
-      GATEKEEPER_CAP_ASSET_BASE_URL="http://localhost:3000",
-      GATEKEEPER_CAP_SITE_KEY="site-key",
-      GATEKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="false",
+      CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP="true",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
+      CRYKEEPER_CAP_ASSET_BASE_URL="http://localhost:3000",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
     )
 
     local_response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       query_string={"return": "/ok"},
     )
     non_local_response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://example.com",
       query_string={"return": "/ok"},
     )
@@ -94,14 +94,14 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_ip_binding_uses_trusted_proxy_hop(self):
     app = self._create_app(
-      GATEKEEPER_HUMAN_COOKIE_BINDING="ip-user-agent",
-      GATEKEEPER_TRUSTED_PROXY_HOPS="1",
-      GATEKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
+      CRYKEEPER_HUMAN_COOKIE_BINDING="ip-user-agent",
+      CRYKEEPER_TRUSTED_PROXY_HOPS="1",
+      CRYKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
     )
     client = app.test_client()
 
     client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/ok"},
       headers={
@@ -112,7 +112,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     same_trusted_hop = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-URI": "/ok",
@@ -122,7 +122,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
       environ_overrides={"REMOTE_ADDR": "10.0.0.5"},
     )
     different_trusted_hop = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-URI": "/ok",
@@ -137,14 +137,14 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_untrusted_proxy_headers_are_ignored(self):
     app = self._create_app(
-      GATEKEEPER_HUMAN_COOKIE_BINDING="ip-user-agent",
-      GATEKEEPER_TRUSTED_PROXY_HOPS="1",
-      GATEKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
+      CRYKEEPER_HUMAN_COOKIE_BINDING="ip-user-agent",
+      CRYKEEPER_TRUSTED_PROXY_HOPS="1",
+      CRYKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
     )
     client = app.test_client()
 
     client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/ok"},
       headers={
@@ -155,7 +155,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     replay = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-URI": "/ok",
@@ -170,7 +170,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
   def test_non_local_verification_requires_secure_cookie_policy(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://example.com",
       query_string={"return": "/ok"},
     )
@@ -179,24 +179,24 @@ class GatekeeperHardeningTests(unittest.TestCase):
     self.assertIn("HTTPS", response.get_data(as_text=True))
 
   def test_secure_cookie_defaults_to_host_prefix(self):
-    app = self._create_app(GATEKEEPER_HUMAN_COOKIE_SECURE="true")
+    app = self._create_app(CRYKEEPER_HUMAN_COOKIE_SECURE="true")
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok"},
       headers={"User-Agent": "UA"},
     )
 
     set_cookie = response.headers["Set-Cookie"]
-    self.assertTrue(set_cookie.startswith("__Host-gatekeeper_verified="))
+    self.assertTrue(set_cookie.startswith("__Host-crykeeper_verified="))
     self.assertIn("Secure", set_cookie)
 
   def test_skip_routes_bypass_auth_for_matching_method_and_path(self):
-    app = self._create_app(GATEKEEPER_SKIP_ROUTES="^/public/,POST=^/api/")
+    app = self._create_app(CRYKEEPER_SKIP_ROUTES="^/public/,POST=^/api/")
     client = app.test_client()
 
     public_response = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-Method": "GET",
@@ -204,7 +204,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
       },
     )
     api_post_response = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-Method": "POST",
@@ -212,7 +212,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
       },
     )
     api_get_response = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-Method": "GET",
@@ -229,11 +229,11 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 human_cookie_secure = false
                 skip_routes = ["^/shared-public/"]
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
 
                 [[website]]
                 domains = ["one.example.com"]
@@ -246,9 +246,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
@@ -256,7 +256,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
     client = app.test_client()
     shared_default_route = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={
         "X-Original-Method": "GET",
@@ -286,22 +286,22 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_challenge_rate_limit_returns_retry_after(self):
     app = self._create_app(
-      GATEKEEPER_CHALLENGE_RATE_LIMIT_REQUESTS="2",
-      GATEKEEPER_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS="60",
-      GATEKEEPER_CHALLENGE_RATE_LIMIT_BLOCK_SECONDS="30",
+      CRYKEEPER_CHALLENGE_RATE_LIMIT_REQUESTS="2",
+      CRYKEEPER_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS="60",
+      CRYKEEPER_CHALLENGE_RATE_LIMIT_BLOCK_SECONDS="30",
     )
     client = app.test_client()
 
     for _ in range(2):
       response = client.get(
-        "/gatekeeper/challenge",
+        "/crykeeper/challenge",
         base_url="http://localhost",
         query_string={"return": "/ok"},
       )
       self.assertEqual(200, response.status_code)
 
     limited = client.get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       query_string={"return": "/ok"},
     )
@@ -311,20 +311,20 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_verify_rate_limit_returns_retry_after(self):
     app = self._create_app(
-      GATEKEEPER_VERIFY_RATE_LIMIT_REQUESTS="1",
-      GATEKEEPER_VERIFY_RATE_LIMIT_WINDOW_SECONDS="60",
-      GATEKEEPER_VERIFY_RATE_LIMIT_BLOCK_SECONDS="45",
+      CRYKEEPER_VERIFY_RATE_LIMIT_REQUESTS="1",
+      CRYKEEPER_VERIFY_RATE_LIMIT_WINDOW_SECONDS="60",
+      CRYKEEPER_VERIFY_RATE_LIMIT_BLOCK_SECONDS="45",
     )
     client = app.test_client()
 
     first = client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/ok"},
       headers={"User-Agent": "UA"},
     )
     limited = client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/ok"},
       headers={"User-Agent": "UA"},
@@ -339,23 +339,23 @@ class GatekeeperHardeningTests(unittest.TestCase):
     client = app.test_client()
 
     client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
       data={"return": "/ok"},
       headers={"User-Agent": "UA"},
     )
     before_clear = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={"X-Original-URI": "/ok", "User-Agent": "UA"},
     )
     cleared = client.get(
-      "/gatekeeper/clear",
+      "/crykeeper/clear",
       base_url="http://localhost",
       query_string={"return": "/signed-out"},
     )
     after_clear = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={"X-Original-URI": "/ok", "User-Agent": "UA"},
     )
@@ -363,64 +363,64 @@ class GatekeeperHardeningTests(unittest.TestCase):
     self.assertEqual(204, before_clear.status_code)
     self.assertEqual(302, cleared.status_code)
     self.assertEqual("/signed-out", cleared.headers["Location"])
-    self.assertIn("gatekeeper_verified=;", cleared.headers["Set-Cookie"])
+    self.assertIn("crykeeper_verified=;", cleared.headers["Set-Cookie"])
     self.assertIn("Max-Age=0", cleared.headers["Set-Cookie"])
     self.assertEqual(401, after_clear.status_code)
 
-  def test_clear_endpoint_replaces_blocked_gatekeeper_return_path_with_root(self):
+  def test_clear_endpoint_replaces_blocked_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/clear",
+      "/crykeeper/clear",
       base_url="http://localhost",
-      query_string={"return": "/gatekeeper/challenge?return=/ok"},
+      query_string={"return": "/crykeeper/challenge?return=/ok"},
     )
 
     self.assertEqual(302, response.status_code)
     self.assertEqual("/", response.headers["Location"])
 
-  def test_clear_endpoint_replaces_dot_segment_gatekeeper_return_path_with_root(self):
+  def test_clear_endpoint_replaces_dot_segment_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/clear",
+      "/crykeeper/clear",
       base_url="http://localhost",
-      query_string={"return": "/safe/../gatekeeper/challenge?return=/ok"},
+      query_string={"return": "/safe/../crykeeper/challenge?return=/ok"},
     )
 
     self.assertEqual(302, response.status_code)
     self.assertEqual("/", response.headers["Location"])
 
-  def test_auth_redirect_replaces_blocked_gatekeeper_return_path_with_root(self):
+  def test_auth_redirect_replaces_blocked_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
-      headers={"X-Original-URI": "/gatekeeper/challenge?return=/ok"},
+      headers={"X-Original-URI": "/crykeeper/challenge?return=/ok"},
     )
 
     self.assertEqual(401, response.status_code)
     self.assertEqual(
-      "/gatekeeper/challenge?return=%2F", response.headers["X-Auth-Redirect"]
+      "/crykeeper/challenge?return=%2F", response.headers["X-Auth-Redirect"]
     )
 
-  def test_auth_redirect_replaces_dot_segment_gatekeeper_return_path_with_root(self):
+  def test_auth_redirect_replaces_dot_segment_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
-      headers={"X-Original-URI": "/safe/%2E%2E/gatekeeper/challenge?return=/ok"},
+      headers={"X-Original-URI": "/safe/%2E%2E/crykeeper/challenge?return=/ok"},
     )
 
     self.assertEqual(401, response.status_code)
     self.assertEqual(
-      "/gatekeeper/challenge?return=%2F", response.headers["X-Auth-Redirect"]
+      "/crykeeper/challenge?return=%2F", response.headers["X-Auth-Redirect"]
     )
 
-  def test_verify_replaces_percent_encoded_gatekeeper_return_path_with_root(self):
+  def test_verify_replaces_percent_encoded_crykeeper_return_path_with_root(self):
     app = self._create_app()
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="http://localhost",
-      data={"return": "/gatekeeper%2Fchallenge?return=/ok"},
+      data={"return": "/crykeeper%2Fchallenge?return=/ok"},
       headers={"User-Agent": "UA"},
     )
 
@@ -429,14 +429,14 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_cap_verify_requires_token(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="cap",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
-      GATEKEEPER_CAP_SITE_KEY="site-key",
-      GATEKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok"},
     )
@@ -454,14 +454,14 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="cap",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
-      GATEKEEPER_CAP_SITE_KEY="site-key",
-      GATEKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "cap-token": "good-token"},
       headers={"User-Agent": "UA"},
@@ -487,14 +487,14 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="cap",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
-      GATEKEEPER_CAP_SITE_KEY="site-key",
-      GATEKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "cap-token": "retry-token"},
     )
@@ -510,15 +510,15 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_challenge_page_uses_external_script_with_csp(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="cap",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
-      GATEKEEPER_CAP_ASSET_BASE_URL="https://cap.example.com",
-      GATEKEEPER_CAP_SITE_KEY="site-key",
-      GATEKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
+      CRYKEEPER_CAP_ASSET_BASE_URL="https://cap.example.com",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
     )
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="https://example.com",
       query_string={"return": "/ok"},
     )
@@ -529,9 +529,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' https://cap.example.com", csp
     )
     self.assertIn("script-src-elem 'self' https://cap.example.com 'unsafe-inline'", csp)
-    self.assertIn("/gatekeeper/static/challenge-common.js", body)
-    self.assertIn("/gatekeeper/static/challenge-cap.js", body)
-    self.assertNotIn("/gatekeeper/static/challenge-dummy.js", body)
+    self.assertIn("/crykeeper/static/challenge-common.js", body)
+    self.assertIn("/crykeeper/static/challenge-cap.js", body)
+    self.assertNotIn("/crykeeper/static/challenge-dummy.js", body)
     self.assertIn("https://cap.example.com/assets/widget.js", body)
     self.assertNotIn("<script>", body)
     self.assertNotIn('type="application/json"', body)
@@ -539,33 +539,33 @@ class GatekeeperHardeningTests(unittest.TestCase):
   def test_dummy_challenge_page_uses_dummy_script_only(self):
     app = self._create_app()
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       query_string={"return": "/ok"},
     )
 
     body = response.get_data(as_text=True)
-    self.assertIn("/gatekeeper/static/challenge-common.js", body)
-    self.assertIn("/gatekeeper/static/challenge-dummy.js", body)
-    self.assertNotIn("/gatekeeper/static/challenge-cap.js", body)
+    self.assertIn("/crykeeper/static/challenge-common.js", body)
+    self.assertIn("/crykeeper/static/challenge-dummy.js", body)
+    self.assertNotIn("/crykeeper/static/challenge-cap.js", body)
 
   def test_hcaptcha_challenge_page_uses_hcaptcha_scripts_with_csp(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="hcaptcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      GATEKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="hcaptcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
     )
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="https://example.com",
       query_string={"return": "/ok"},
     )
 
     body = response.get_data(as_text=True)
     csp = response.headers["Content-Security-Policy"]
-    self.assertIn("/gatekeeper/static/challenge-common.js", body)
-    self.assertIn("/gatekeeper/static/challenge-hcaptcha.js", body)
+    self.assertIn("/crykeeper/static/challenge-common.js", body)
+    self.assertIn("/crykeeper/static/challenge-hcaptcha.js", body)
     self.assertIn("https://js.hcaptcha.com/1/api.js?render=explicit", body)
     self.assertNotIn("&#34;invisible&#34;: true", body)
     self.assertNotIn('id="action-button"', body)
@@ -574,22 +574,22 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_altcha_challenge_page_uses_altcha_scripts_and_endpoint(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="altcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_VERIFICATION_MODE="altcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
     )
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="https://example.com",
       query_string={"return": "/ok"},
     )
 
     body = response.get_data(as_text=True)
     csp = response.headers["Content-Security-Policy"]
-    self.assertIn("/gatekeeper/static/challenge-common.js", body)
-    self.assertIn("/gatekeeper/static/challenge-altcha.js", body)
-    self.assertIn("/gatekeeper/static/vendor/altcha.min.js", body)
-    self.assertIn("/gatekeeper/altcha/challenge", body)
+    self.assertIn("/crykeeper/static/challenge-common.js", body)
+    self.assertIn("/crykeeper/static/challenge-altcha.js", body)
+    self.assertIn("/crykeeper/static/vendor/altcha.min.js", body)
+    self.assertIn("/crykeeper/altcha/challenge", body)
     self.assertIn('type="module"', body)
     self.assertIn("worker-src 'self' blob:", csp)
 
@@ -603,13 +603,13 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="hcaptcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      GATEKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="hcaptcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "h-captcha-response": "good-token"},
       headers={"User-Agent": "UA"},
@@ -631,13 +631,13 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="hcaptcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      GATEKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="hcaptcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "h-captcha-response": "retry-token"},
     )
@@ -657,13 +657,13 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="hcaptcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      GATEKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_VERIFICATION_MODE="hcaptcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
     )
     response = app.test_client().post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "h-captcha-response": "bad-token"},
     )
@@ -677,12 +677,12 @@ class GatekeeperHardeningTests(unittest.TestCase):
     create_altcha_challenge.return_value = {"challenge": "payload"}
 
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="altcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_VERIFICATION_MODE="altcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
     )
     response = app.test_client().get(
-      "/gatekeeper/altcha/challenge",
+      "/crykeeper/altcha/challenge",
       base_url="https://example.com",
       query_string={"return": "/ok"},
     )
@@ -692,15 +692,15 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_altcha_verify_success_sets_cookie_and_redirects(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="altcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
-      GATEKEEPER_ALTCHA_CHALLENGE_COST="10",
+      CRYKEEPER_VERIFICATION_MODE="altcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_ALTCHA_CHALLENGE_COST="10",
     )
     client = app.test_client()
 
     challenge_response = client.get(
-      "/gatekeeper/altcha/challenge",
+      "/crykeeper/altcha/challenge",
       base_url="https://example.com",
       query_string={"return": "/ok"},
     )
@@ -716,7 +716,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
     payload = AltchaPayload(challenge, solution).to_base64()
 
     response = client.post(
-      "/gatekeeper/verify",
+      "/crykeeper/verify",
       base_url="https://example.com",
       data={"return": "/ok", "altcha": payload},
       headers={"User-Agent": "UA"},
@@ -727,12 +727,12 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
   def test_altcha_bundled_widget_is_served_locally(self):
     app = self._create_app(
-      GATEKEEPER_VERIFICATION_MODE="altcha",
-      GATEKEEPER_HUMAN_COOKIE_SECURE="true",
-      GATEKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_VERIFICATION_MODE="altcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
     )
     response = app.test_client().get(
-      "/gatekeeper/static/vendor/altcha.min.js",
+      "/crykeeper/static/vendor/altcha.min.js",
       base_url="https://example.com",
     )
     try:
@@ -743,9 +743,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       response.close()
 
   def test_challenge_page_renders_configured_footer_html(self):
-    app = self._create_app(GATEKEEPER_FOOTER_HTML="powered by <strong>cryMG</strong>")
+    app = self._create_app(CRYKEEPER_FOOTER_HTML="powered by <strong>cryMG</strong>")
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       query_string={"return": "/ok"},
     )
@@ -759,20 +759,20 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 human_cookie_secure = false
                 footer_html = { en = 'default <strong>footer</strong>', de = 'standard <strong>fuss</strong>' }
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
                 """,
       )
 
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
@@ -780,13 +780,13 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
     client = app.test_client()
     german_response = client.get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       headers={"Accept-Language": "de"},
       query_string={"return": "/ok"},
     )
     french_response = client.get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       headers={"Accept-Language": "fr"},
       query_string={"return": "/ok"},
@@ -804,11 +804,11 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 human_cookie_secure = false
                 footer_html = { en = 'default <strong>footer</strong>', de = 'standard <strong>fuss</strong>' }
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
 
                 [[website]]
                 domains = ["one.example.com"]
@@ -821,9 +821,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
@@ -831,7 +831,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
 
     client = app.test_client()
     default_response = client.get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       headers={"Accept-Language": "de"},
       query_string={"return": "/ok"},
@@ -867,11 +867,11 @@ class GatekeeperHardeningTests(unittest.TestCase):
     redis_from_url.return_value = fake_client
 
     app = self._create_app(
-      GATEKEEPER_RATE_LIMIT_BACKEND="valkey",
-      GATEKEEPER_RATE_LIMIT_VALKEY_URL="redis://valkey:6379/1",
+      CRYKEEPER_RATE_LIMIT_BACKEND="valkey",
+      CRYKEEPER_RATE_LIMIT_VALKEY_URL="redis://valkey:6379/1",
     )
     response = app.test_client().get(
-      "/gatekeeper/challenge",
+      "/crykeeper/challenge",
       base_url="http://localhost",
       query_string={"return": "/ok"},
     )
@@ -885,10 +885,10 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 human_cookie_secure = false
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
 
                 [[website]]
                 domains = ["one.example.com"]
@@ -901,9 +901,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
@@ -916,7 +916,7 @@ class GatekeeperHardeningTests(unittest.TestCase):
       headers={"X-Original-URI": "/ok"},
     )
     default_check = client.get(
-      "/gatekeeper/check",
+      "/crykeeper/check",
       base_url="http://localhost",
       headers={"X-Original-URI": "/ok"},
     )
@@ -933,10 +933,10 @@ class GatekeeperHardeningTests(unittest.TestCase):
     )
     self.assertEqual(401, default_check.status_code)
     self.assertTrue(
-      default_check.headers["X-Auth-Redirect"].startswith("/gatekeeper/challenge?")
+      default_check.headers["X-Auth-Redirect"].startswith("/crykeeper/challenge?")
     )
     self.assertTrue(
-      verify_response.headers["Set-Cookie"].startswith("__Host-gatekeeper_verified=")
+      verify_response.headers["Set-Cookie"].startswith("__Host-crykeeper_verified=")
     )
 
   def test_rate_limits_are_separated_by_website_host(self):
@@ -944,12 +944,12 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 challenge_rate_limit_requests = 1
                 challenge_rate_limit_window_seconds = 60
                 challenge_rate_limit_block_seconds = 30
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
 
                 [[website]]
                 domains = ["one.example.com"]
@@ -966,9 +966,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
@@ -1007,11 +1007,11 @@ class GatekeeperHardeningTests(unittest.TestCase):
       config_path = self._write_config(
         temp_dir,
         """
-                [gatekeeper]
+                [crykeeper]
                 secret_key = "default-secret"
                 rate_limit_backend = "auto"
                 rate_limit_valkey_url = "redis://shared-valkey:6379/1"
-                path_prefix = "/gatekeeper"
+                path_prefix = "/crykeeper"
 
                 [[website]]
                 domains = ["one.example.com"]
@@ -1028,9 +1028,9 @@ class GatekeeperHardeningTests(unittest.TestCase):
       with patch.dict(
         os.environ,
         {
-          "GATEKEEPER_CONFIG_FILE": config_path,
-          "GATEKEEPER_VERIFICATION_MODE": "dummy",
-          "GATEKEEPER_TRUSTED_PROXY_HOPS": "0",
+          "CRYKEEPER_CONFIG_FILE": config_path,
+          "CRYKEEPER_VERIFICATION_MODE": "dummy",
+          "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
         },
         clear=True,
       ):
