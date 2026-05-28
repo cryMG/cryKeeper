@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 ARG VERSION=dev
 ARG VCS_REF=
@@ -12,7 +12,7 @@ LABEL org.opencontainers.image.title="cryKeeper" \
     org.opencontainers.image.vendor="cryeffect Media Group" \
     org.opencontainers.image.authors="Peter Müller <peter@crycode.de>" \
     org.opencontainers.image.licenses="MIT" \
-    org.opencontainers.image.base.name="docker.io/library/python:3.13-slim" \
+    org.opencontainers.image.base.name="docker.io/library/python:3.14-slim" \
     org.opencontainers.image.version="${VERSION}" \
     org.opencontainers.image.revision="${VCS_REF}" \
     org.opencontainers.image.created="${BUILD_DATE}"
