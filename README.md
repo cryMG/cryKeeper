@@ -408,6 +408,7 @@ docker build \
 
 GitHub Actions publishes container images to `ghcr.io/crymg/crykeeper`.
 The publish workflow writes the package description, source URL, and license both as OCI labels in the image and as OCI manifest annotations so the GitHub package UI can display them reliably.
+Published tags are multi-architecture manifests for `linux/amd64` and `linux/arm64`.
 
 - A Git tag in the form `vX.Y.Z` publishes the tags `vX.Y.Z`, `vX.Y`, `vX`, and `latest`
 - A prerelease tag in the form `vX.Y.Z-suffix` publishes only the exact tag and never `latest`

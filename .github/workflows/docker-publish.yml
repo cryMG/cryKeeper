@@ -157,6 +157,12 @@ jobs:
         if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false'
         uses: docker/setup-buildx-action@v4
 
+      - name: Set up QEMU
+        if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
       - name: Skip existing nightly commit
         id: nightly_guard
         if: steps.metadata.outputs.publish == 'true' && steps.tests_guard.outputs.publish != 'false' && steps.metadata.outputs.version == 'nightly'
@@ -182,6 +188,7 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.metadata.outputs.tags }}
           annotations: |
             manifest:org.opencontainers.image.description=The open-source human verification service for Nginx making bots cry
