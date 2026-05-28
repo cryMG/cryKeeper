@@ -1,0 +1,74 @@
+version: 2
+updates:
+
+  # Check for updates to GitHub Actions every week.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    assignees:
+      - "crycode-de"
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Check for updates to Python dependencies used by the app and CI.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:15"
+      timezone: "Europe/Berlin"
+    assignees:
+      - "crycode-de"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    open-pull-requests-limit: 10
+    groups:
+      python-non-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Check for updates to Docker base images used by the runtime and demo backend.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/examples/demo-backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Berlin"
+    assignees:
+      - "crycode-de"
+    commit-message:
+      prefix: "build(deps)"
+    open-pull-requests-limit: 10
+
+  # Check for updates to container images referenced by the local example stack.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "06:45"
+      timezone: "Europe/Berlin"
+    assignees:
+      - "crycode-de"
+    commit-message:
+      prefix: "ops(deps)"
+    open-pull-requests-limit: 10
