@@ -3,6 +3,7 @@
   "eyebrow": "cryKeeper - Sicherheitsprüfung",
   "headline": "Anfrage muss verifiziert werden",
   "body": "Bitte warte kurz, während der Zugriff geprüft wird.",
+  "noscript_required": "JavaScript muss im Browser aktiviert sein, um die Verifizierung durchzuführen!",
   "dummy_progress_running": "Verifizierung wird simuliert",
   "dummy_notice": "Der Dummy-Mode ist aktiv. Setze verification_mode auf cap, altcha oder hcaptcha, um eine echte Verifizierung zu erzwingen.",
   "dummy_continue": "Weiter",

@@ -10,6 +10,7 @@ REQUIRED_TRANSLATION_KEYS = (
   "eyebrow",
   "headline",
   "body",
+  "noscript_required",
   "dummy_notice",
   "dummy_continue",
   "progress_label",

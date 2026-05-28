@@ -3,6 +3,7 @@
   "eyebrow": "cryKeeper - Security Check",
   "headline": "Request verification required",
   "body": "Please wait while access is being verified.",
+  "noscript_required": "JavaScript must be enabled in your browser to complete verification!",
   "dummy_notice": "Dummy mode is active. Set verification_mode to cap, altcha, or hcaptcha to require a real verification.",
   "dummy_continue": "Continue",
   "progress_label": "Verification progress",
