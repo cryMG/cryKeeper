@@ -17,7 +17,7 @@ cryKeeper is a lightweight, Python-powered security container designed to protec
 
 By default, **cryKeeper** focuses strictly on verifying human behavior. This means that *good bots* (like Googlebot, Bingbot, or uptime monitors) will also be blocked or challenged because they cannot pass human verification.
 
-- *If your site relies on SEO (Google Indexing):* You should whitelist known search engine IP ranges or user agents in your Nginx configuration before the request hits cryKeeper.
+- *If your site relies on SEO (Google Indexing):* You can allow known search engines directly in cryKeeper, or bypass selected clients with explicit IP or User-Agent allowlists. Prefer IP-based allowlists when trust boundaries matter, because User-Agent matching is easy to spoof.
 - *If your site is a private app (Nextcloud, Bitwarden, internal tools):* This is actually a feature! It keeps your private instances completely hidden from any search engine or automated scanner.
 
 ## Features
@@ -27,13 +27,15 @@ By default, **cryKeeper** focuses strictly on verifying human behavior. This mea
 - Choose between Cap, ALTCHA, hCaptcha, or Dummy mode depending on your deployment and testing needs.
 - Configure shared defaults and per-host website overrides with different domains, prefixes, and challenge settings.
 - Exclude selected routes from checks with skip rules when parts of the site should stay reachable without verification.
+- Bypass the human check for selected client IPs, User-Agent regexes, or a built-in set of common search-engine crawlers.
 - Apply challenge and verify rate limits, with optional shared state through Valkey for multi-worker or multi-instance deployments.
 - Localize the challenge page and add deployment-specific footer content.
 
 ## How it works
 
 - nginx sends an internal auth_request subrequest to cryKeeper before the original request reaches the protected upstream.
-- cryKeeper checks the signed verification cookie. If it is valid, cryKeeper returns 204 and nginx forwards the original request to the website.
+- cryKeeper first evaluates configured auth bypasses for routes, client IPs, User-Agents, and optional known search-engine crawlers. If one matches, cryKeeper returns 204 immediately.
+- Otherwise cryKeeper checks the signed verification cookie. If it is valid, cryKeeper returns 204 and nginx forwards the original request to the website.
 - If the cookie is missing or invalid, cryKeeper returns 401 together with an X-Auth-Redirect header so nginx can redirect to, or internally proxy, the challenge page.
 - After a successful challenge, cryKeeper sets a new signed verification cookie and redirects the browser back to the validated original target.
 
@@ -168,7 +170,7 @@ The example above internally proxies the challenge page so the browser keeps the
 
 Every configured `path_prefix` exposes the same set of cryKeeper endpoints. With the default configuration, the paths are available below `/crykeeper`.
 
-- `GET <path_prefix>/check`: internal auth endpoint for nginx `auth_request`. Returns `204 No Content` when the signed verification cookie is valid, or `401 Unauthorized` plus the `X-Auth-Redirect` header when nginx should hand the browser over to the challenge flow, for example by internally proxying the challenge page with a `403 Forbidden` response.
+- `GET <path_prefix>/check`: internal auth endpoint for nginx `auth_request`. Returns `204 No Content` when a configured bypass matches or when the signed verification cookie is valid, or `401 Unauthorized` plus the `X-Auth-Redirect` header when nginx should hand the browser over to the challenge flow, for example by internally proxying the challenge page with a `403 Forbidden` response.
 - `GET <path_prefix>/challenge`: browser-facing challenge page. Renders the configured verification flow, respects the safe local `return` query parameter, enforces the secure-transport rules, and applies the challenge rate limit.
 - `POST <path_prefix>/verify`: completes the active provider verification, sets the signed verification cookie, and redirects the browser to the validated local `return` path. This endpoint is protected by the verify rate limit.
 - `GET <path_prefix>/altcha/challenge`: provider-specific ALTCHA challenge endpoint. Returns a fresh signed ALTCHA challenge as JSON and applies the same secure-transport and challenge rate-limit checks as the HTML challenge page.
@@ -231,6 +233,34 @@ export CRYKEEPER_TRUSTED_PROXY_CIDRS=172.16.0.0/12
 
 Non-empty environment variables override only the shared defaults. They do not create or override individual `[[website]]` entries.
 
+### Optional verification bypasses
+
+Requests that match any of the following settings are allowed through `GET <path_prefix>/check` immediately and do not need a valid verification cookie:
+
+- `skip_routes`: bypasses based on the original request path and optional HTTP method.
+- `bypass_user_agents`: Python regexes matched against the current `User-Agent` header.
+- `bypass_ips`: client IPs or CIDR ranges matched against the sanitized client address after trusted proxy handling.
+- `allow_known_search_engines`: enables a built-in `User-Agent` matcher for common search crawlers such as Googlebot, Bingbot, DuckDuckBot, Yahoo Slurp, YandexBot, Baiduspider, Applebot, PetalBot, and SeznamBot.
+
+TOML example:
+
+```toml
+[crykeeper]
+bypass_user_agents = ["^MyMonitoringBot/", "(?i)uptimerobot"]
+bypass_ips = ["203.0.113.10", "2001:db8::/32"]
+allow_known_search_engines = true
+```
+
+Environment variable example:
+
+```bash
+export CRYKEEPER_BYPASS_USER_AGENTS='^MyMonitoringBot/,(?i)uptimerobot'
+export CRYKEEPER_BYPASS_IPS='203.0.113.10,2001:db8::/32'
+export CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES=true
+```
+
+Use `bypass_ips` when you want the strongest built-in trust signal. `bypass_user_agents` and `allow_known_search_engines` are convenient, but both ultimately rely on a client-controlled header.
+
 ## When Valkey Makes Sense
 
 cryKeeper stays stateless even when you enable Valkey. The only thing stored in Valkey is rate-limit state; the human-verification cookie remains signed and client-side.
@@ -253,6 +283,7 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 - Serve cryKeeper behind HTTPS and set `human_cookie_secure = true` in production
 - Keep the reverse proxy prefix aligned with `path_prefix`
 - Set `trusted_proxy_hops` and `trusted_proxy_cidrs` to match your real proxy chain whenever a reverse proxy supplies forwarded headers
+- Decide explicitly whether trusted crawlers or monitoring systems should bypass the human check via `bypass_ips`, `bypass_user_agents`, or `allow_known_search_engines`
 - If you run multiple cryKeeper workers or replicas, configure Valkey for shared rate limiting via `rate_limit_backend` and `rate_limit_valkey_url`; this includes the default Docker image, which starts Gunicorn with 2 workers
 - In Cap mode, set `cap_public_base_url`, `cap_site_key`, and `cap_secret_key`, plus `cap_internal_base_url` if server-side verification should use a different route
 - In hCaptcha mode, set `hcaptcha_site_key` and `hcaptcha_secret_key`; `hcaptcha_script_url` and `hcaptcha_verify_url` default to the official endpoints
@@ -425,6 +456,7 @@ For development, these files are the most important entry points:
 - If `ip-user-agent` binding is unstable, verify `trusted_proxy_hops`, optional `trusted_proxy_cidrs`, and your forwarded-header setup
 - If a custom translation does not appear, check the JSON filename, keep English complete, and restart the container after adding or changing files
 - If `skip_routes` does not bypass the challenge, verify the regex against the original request path and make sure nginx forwards `X-Original-Method`
+- If `bypass_ips` does not match as expected, verify `trusted_proxy_hops`, `trusted_proxy_cidrs`, and which client IP cryKeeper actually sees after proxy sanitization
 
 ## License
 

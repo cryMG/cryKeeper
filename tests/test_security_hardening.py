@@ -284,6 +284,87 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertEqual(204, website_post_route.status_code)
     self.assertEqual(401, website_inherited_default.status_code)
 
+  def test_user_agent_bypass_regex_skips_cookie_requirement(self):
+    app = self._create_app(CRYKEEPER_BYPASS_USER_AGENTS="^FriendlyBot/.*$")
+    client = app.test_client()
+
+    bypassed = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "User-Agent": "FriendlyBot/1.0",
+        "X-Original-Method": "GET",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+    blocked = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "User-Agent": "RegularBrowser/1.0",
+        "X-Original-Method": "GET",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+
+    self.assertEqual(204, bypassed.status_code)
+    self.assertEqual(401, blocked.status_code)
+
+  def test_ip_bypass_accepts_ipv4_and_ipv6(self):
+    app = self._create_app(CRYKEEPER_BYPASS_IPS="203.0.113.7,2001:db8::/32")
+    client = app.test_client()
+
+    ipv4_bypassed = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"X-Original-URI": "/protected/resource"},
+      environ_overrides={"REMOTE_ADDR": "203.0.113.7"},
+    )
+    ipv6_bypassed = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"X-Original-URI": "/protected/resource"},
+      environ_overrides={"REMOTE_ADDR": "2001:db8::42"},
+    )
+    blocked = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"X-Original-URI": "/protected/resource"},
+      environ_overrides={"REMOTE_ADDR": "198.51.100.7"},
+    )
+
+    self.assertEqual(204, ipv4_bypassed.status_code)
+    self.assertEqual(204, ipv6_bypassed.status_code)
+    self.assertEqual(401, blocked.status_code)
+
+  def test_known_search_engines_can_bypass_cookie_requirement(self):
+    app = self._create_app(CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES="true")
+    client = app.test_client()
+
+    bypassed = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+
+    self.assertEqual(204, bypassed.status_code)
+
+  def test_known_search_engines_stay_blocked_when_option_is_disabled(self):
+    app = self._create_app()
+    response = app.test_client().get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+
+    self.assertEqual(401, response.status_code)
+
   def test_challenge_rate_limit_returns_retry_after(self):
     app = self._create_app(
       CRYKEEPER_CHALLENGE_RATE_LIMIT_REQUESTS="2",

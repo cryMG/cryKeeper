@@ -63,6 +63,9 @@ CONFIGURABLE_ENV_SUFFIXES = (
   "MAX_RETURN_PATH_LENGTH",
   "FOOTER_HTML",
   "SKIP_ROUTES",
+  "BYPASS_USER_AGENTS",
+  "BYPASS_IPS",
+  "ALLOW_KNOWN_SEARCH_ENGINES",
   "PATH_PREFIX",
 )
 KNOWN_CONFIG_KEYS = frozenset(name.lower() for name in CONFIGURABLE_ENV_SUFFIXES)
@@ -631,6 +634,56 @@ def _read_skip_routes(
 
 
 @dataclass(frozen=True)
+class UserAgentBypassRule:
+  """One user-agent regex that bypasses the auth_request cookie check."""
+
+  pattern: str
+  regex: re.Pattern[str] = field(repr=False, compare=False)
+
+  def matches(self, user_agent: str) -> bool:
+    """Return true when the configured regex matches the current user agent."""
+    return self.regex.search(user_agent) is not None
+
+
+def _read_bypass_user_agents(
+  config_source: ConfigSource, name: str
+) -> tuple[UserAgentBypassRule, ...]:
+  """Read regex-based user-agent bypass rules from env vars or TOML arrays."""
+  values = _read_csv_values(config_source, name)
+  rules: list[UserAgentBypassRule] = []
+  for value in values:
+    try:
+      compiled_pattern = re.compile(value)
+    except re.error as exc:
+      raise RuntimeError(f"{name} contains an invalid regex '{value}': {exc}.") from exc
+    rules.append(UserAgentBypassRule(pattern=value, regex=compiled_pattern))
+  return tuple(rules)
+
+
+@dataclass(frozen=True)
+class IpBypassRule:
+  """One IP or CIDR range that bypasses the auth_request cookie check."""
+
+  value: str
+  network: Any = field(repr=False, compare=False)
+
+
+def _read_bypass_ips(
+  config_source: ConfigSource, name: str
+) -> tuple[IpBypassRule, ...]:
+  """Read bypass IPs or CIDRs from env vars or TOML arrays."""
+  values = _read_csv_values(config_source, name)
+  rules: list[IpBypassRule] = []
+  for value in values:
+    try:
+      network = ip_network(value, strict=False)
+    except ValueError as exc:
+      raise RuntimeError(f"{name} contains an invalid IP or CIDR '{value}'.") from exc
+    rules.append(IpBypassRule(value=value, network=network))
+  return tuple(rules)
+
+
+@dataclass(frozen=True)
 class Settings:
   """Effective runtime settings derived from defaults, TOML, and env vars."""
 
@@ -674,6 +727,9 @@ class Settings:
   max_return_path_length: int
   footer_html: LocalizedHtml
   skip_routes: tuple[SkipRouteRule, ...]
+  bypass_user_agents: tuple[UserAgentBypassRule, ...]
+  bypass_ips: tuple[IpBypassRule, ...]
+  allow_known_search_engines: bool
   path_prefix: str
   blocked_return_prefixes: tuple[str, ...]
 
@@ -953,6 +1009,13 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
     ),
     footer_html=_read_footer_html(config_source, _env_name("FOOTER_HTML")),
     skip_routes=_read_skip_routes(config_source, _env_name("SKIP_ROUTES")),
+    bypass_user_agents=_read_bypass_user_agents(
+      config_source, _env_name("BYPASS_USER_AGENTS")
+    ),
+    bypass_ips=_read_bypass_ips(config_source, _env_name("BYPASS_IPS")),
+    allow_known_search_engines=_read_bool(
+      config_source, _env_name("ALLOW_KNOWN_SEARCH_ENGINES"), False
+    ),
     path_prefix=path_prefix,
     blocked_return_prefixes=(
       path_prefix,

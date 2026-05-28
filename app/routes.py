@@ -1,3 +1,4 @@
+import re
 from http import HTTPStatus
 from ipaddress import ip_address
 from urllib.parse import urlencode, urlsplit
@@ -29,18 +30,45 @@ crykeeper = Blueprint(
   "crykeeper", __name__, static_folder="static", static_url_path="/static"
 )
 
+KNOWN_SEARCH_ENGINE_USER_AGENTS = (
+  (
+    "google",
+    re.compile(
+      r"\b(?:Googlebot|GoogleOther|Google-InspectionTool|AdsBot-Google|Mediapartners-Google|APIs-Google|Storebot-Google)\b",
+      re.IGNORECASE,
+    ),
+  ),
+  ("bing", re.compile(r"\b(?:bingbot|BingPreview|AdIdxBot)\b", re.IGNORECASE)),
+  ("duckduckgo", re.compile(r"\bDuckDuckBot\b", re.IGNORECASE)),
+  ("yahoo", re.compile(r"\bSlurp\b", re.IGNORECASE)),
+  (
+    "yandex",
+    re.compile(
+      r"\bYandex(?:Bot|Images|Video|MobileBot|AccessibilityBot)\b",
+      re.IGNORECASE,
+    ),
+  ),
+  ("baidu", re.compile(r"\bBaiduspider\b", re.IGNORECASE)),
+  ("apple", re.compile(r"\bApplebot\b", re.IGNORECASE)),
+  ("petal", re.compile(r"\bPetalBot\b", re.IGNORECASE)),
+  ("seznam", re.compile(r"\bSeznamBot\b", re.IGNORECASE)),
+)
+
 
 @crykeeper.get("/check")
 def check() -> tuple[str, int] | Response:
   """Validate the signed cookie for nginx auth_request subrequests."""
   settings = _settings()
   original_uri = _original_request_uri()
-  if _skip_auth_route_matches(settings):
+  bypass_reason = _auth_bypass_reason(settings)
+  if bypass_reason is not None:
     current_app.logger.info(
-      "Bypassing auth for configured skip route",
+      "Bypassing auth",
       extra={
+        "reason": bypass_reason,
         "request_method": _original_request_method(),
         "request_path": _original_request_path(),
+        "client_ip": _client_ip_value(),
       },
     )
     return "", HTTPStatus.NO_CONTENT
@@ -528,6 +556,74 @@ def _skip_auth_route_matches(settings: object) -> bool:
   return any(
     rule.matches(original_path, original_method) for rule in settings.skip_routes
   )
+
+
+def _request_user_agent() -> str:
+  """Return the raw user agent header for bypass checks and cookie binding."""
+  return request.headers.get("User-Agent", "")
+
+
+def _bypass_ip_reason(settings: object) -> str | None:
+  """Return the matched bypass IP rule, if the client address is allowlisted."""
+  normalized_client_ip = _client_ip_value()
+  if not normalized_client_ip:
+    return None
+
+  try:
+    client_ip = ip_address(normalized_client_ip)
+  except ValueError:
+    return None
+
+  for rule in settings.bypass_ips:
+    if client_ip in rule.network:
+      return f"bypass_ip:{rule.value}"
+
+  return None
+
+
+def _bypass_user_agent_reason(settings: object) -> str | None:
+  """Return the matched user-agent bypass rule, if one applies."""
+  user_agent = _request_user_agent()
+  if not user_agent:
+    return None
+
+  for rule in settings.bypass_user_agents:
+    if rule.matches(user_agent):
+      return f"bypass_user_agent:{rule.pattern}"
+
+  return None
+
+
+def _known_search_engine_reason(settings: object) -> str | None:
+  """Return the matched search engine name when crawler bypass is enabled."""
+  if not settings.allow_known_search_engines:
+    return None
+
+  user_agent = _request_user_agent()
+  if not user_agent:
+    return None
+
+  for engine_name, pattern in KNOWN_SEARCH_ENGINE_USER_AGENTS:
+    if pattern.search(user_agent) is not None:
+      return f"known_search_engine:{engine_name}"
+
+  return None
+
+
+def _auth_bypass_reason(settings: object) -> str | None:
+  """Return the first configured auth bypass reason for the current request."""
+  if _skip_auth_route_matches(settings):
+    return "skip_route"
+
+  ip_reason = _bypass_ip_reason(settings)
+  if ip_reason is not None:
+    return ip_reason
+
+  user_agent_reason = _bypass_user_agent_reason(settings)
+  if user_agent_reason is not None:
+    return user_agent_reason
+
+  return _known_search_engine_reason(settings)
 
 
 def _normalized_ip(value: str | None) -> str | None:
