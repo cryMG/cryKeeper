@@ -20,6 +20,7 @@ DEFAULT_COOKIE_NAME = "crykeeper_verified"
 DEFAULT_HOST_COOKIE_NAME = "__Host-crykeeper_verified"
 DEFAULT_RATE_LIMIT_VALKEY_PREFIX = "crykeeper:rl"
 MIN_BYPASS_HEADER_TOKEN_LENGTH = 32
+INTERNAL_OBSERVABILITY_PATH = "/_crykeeper"
 INTERNAL_CHECK_PATH = "/_crykeeper_check"
 CONFIG_TABLE_NAME = "crykeeper"
 WEBSITE_TABLE_NAME = "website"
@@ -454,6 +455,11 @@ def _read_path_prefix(config_source: ConfigSource, name: str, default: str) -> s
       f"{name} must be a clean path prefix without query strings, fragments, or double slashes."
     )
 
+  if value == INTERNAL_OBSERVABILITY_PATH:
+    raise RuntimeError(
+      f"{name} must not be '{INTERNAL_OBSERVABILITY_PATH}' because that prefix is reserved for internal observability endpoints."
+    )
+
   return value
 
 
@@ -701,14 +707,10 @@ def _parse_bypass_header_rule(value: str, name: str) -> HeaderBypassRule:
   normalized_value = header_value.strip()
 
   if not separator or not normalized_name or not normalized_value:
-    raise RuntimeError(
-      f"{name} entries must use non-empty HEADER=VALUE pairs."
-    )
+    raise RuntimeError(f"{name} entries must use non-empty HEADER=VALUE pairs.")
 
   if not HEADER_NAME_PATTERN.fullmatch(normalized_name):
-    raise RuntimeError(
-      f"{name} contains an invalid header name '{normalized_name}'."
-    )
+    raise RuntimeError(f"{name} contains an invalid header name '{normalized_name}'.")
 
   if len(normalized_value) < MIN_BYPASS_HEADER_TOKEN_LENGTH:
     raise RuntimeError(
@@ -1060,15 +1062,14 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
       config_source, _env_name("BYPASS_USER_AGENTS")
     ),
     bypass_ips=_read_bypass_ips(config_source, _env_name("BYPASS_IPS")),
-    bypass_headers=_read_bypass_headers(
-      config_source, _env_name("BYPASS_HEADERS")
-    ),
+    bypass_headers=_read_bypass_headers(config_source, _env_name("BYPASS_HEADERS")),
     allow_known_search_engines=_read_bool(
       config_source, _env_name("ALLOW_KNOWN_SEARCH_ENGINES"), False
     ),
     path_prefix=path_prefix,
     blocked_return_prefixes=(
       path_prefix,
+      INTERNAL_OBSERVABILITY_PATH,
       INTERNAL_CHECK_PATH,
     ),
   )

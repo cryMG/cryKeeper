@@ -38,6 +38,7 @@ By default, **cryKeeper** focuses strictly on verifying human behavior. This mea
 - Bypass the human check for selected client IPs, User-Agent regexes, or a built-in set of common search-engine crawlers.
 - Apply challenge and verify rate limits, with optional shared state through Valkey for multi-worker or multi-instance deployments.
 - Localize the challenge page and add deployment-specific footer content.
+- Internal Prometheus metrics and a dashboard for monitoring verify success rates, dominant failure reasons, provider latency, and rate-limit hits.
 
 ## How it works
 
@@ -118,7 +119,9 @@ If you want to build cryKeeper from the local source tree instead, use the check
 
 The Docker image starts Gunicorn with 2 workers and 4 threads by default. You can override that with `CRYKEEPER_GUNICORN_WORKERS` and `CRYKEEPER_GUNICORN_THREADS`.
 
-These two variables affect only the container's Gunicorn process. They are separate from the cryKeeper application settings and are not part of the TOML and `CRYKEEPER_*` config precedence described below.
+For the internal Prometheus endpoint and dashboard, the Docker image also enables Prometheus multiprocess mode by default through `CRYKEEPER_PROMETHEUS_MULTIPROC_DIR=/tmp/crykeeper-prometheus`. If you override that path, keep it writable for the container user and let startup clear it before Gunicorn forks workers.
+
+These runtime variables affect only the container startup and internal Prometheus worker aggregation. They are separate from the cryKeeper application settings and are not part of the TOML and `CRYKEEPER_*` config precedence described below.
 
 ### Available Docker Images
 
@@ -199,6 +202,17 @@ Every configured `path_prefix` exposes the same set of cryKeeper endpoints. With
 
 In deployments with `[[website]]` overrides, the same endpoint set is also exposed below each additional configured `path_prefix`.
 
+## Internal Observability
+
+cryKeeper also exposes two fixed internal observability endpoints outside the public `path_prefix` namespace:
+
+- `GET /_crykeeper/metrics`: Prometheus exposition endpoint with counters and histograms for auth checks, challenge renders, verify outcomes, rate-limit hits, provider latency, and rate-limit backend fallbacks.
+- `GET /_crykeeper/dashboard`: small server-rendered dashboard built from the same live Prometheus metrics. It shows verify success rates, dominant failure reasons, provider latency, skip-route bypass counts, rate-limit hits, and backend fallback counts.
+
+These endpoints are meant for private reverse-proxy exposure only, for example on a dedicated internal hostname or an allowlisted admin vhost. They are intentionally not registered below `path_prefix`, so the normal public challenge routes do not expose them automatically.
+
+If you run multiple Gunicorn workers, keep Prometheus multiprocess mode enabled so the metrics endpoint aggregates all workers correctly. The bundled Docker image handles this automatically with `CRYKEEPER_PROMETHEUS_MULTIPROC_DIR`.
+
 ## Configuration
 
 Preferred configuration is TOML. Environment variables are supported as an alternative.
@@ -215,6 +229,7 @@ Use TOML for the main configuration:
 - Shared defaults go into `[crykeeper]`
 - Optional per-host overrides go into `[[website]]`
 - The default config path inside the container is `/app/config.toml`
+- `path_prefix` must not equal `/_crykeeper`, because that fixed prefix is reserved for the internal observability endpoints
 
 Minimal example:
 
@@ -310,6 +325,7 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 - Decide explicitly whether trusted crawlers, monitoring systems, or upstreams should bypass the human check via `bypass_ips`, `bypass_headers`, `bypass_user_agents`, or `allow_known_search_engines`
 - If you enable `bypass_headers`, use long random tokens with at least 32 characters over HTTPS and keep any proxy-side stripping, forwarding, or injection deliberate and consistent
 - If you run multiple cryKeeper workers or replicas, configure Valkey for shared rate limiting via `rate_limit_backend` and `rate_limit_valkey_url`; this includes the default Docker image, which starts Gunicorn with 2 workers
+- Expose `/_crykeeper/metrics` and `/_crykeeper/dashboard` only through a dedicated protected host, VPN, or other internal-only reverse-proxy path
 - In Cap mode, set `cap_public_base_url`, `cap_site_key`, and `cap_secret_key`, plus `cap_internal_base_url` if server-side verification should use a different route
 - In hCaptcha mode, set `hcaptcha_site_key` and `hcaptcha_secret_key`; `hcaptcha_script_url` and `hcaptcha_verify_url` default to the official endpoints
 - In ALTCHA mode, set at least `altcha_hmac_secret`; `altcha_hmac_key_secret` is optional and `altcha_script_url` defaults to the cryKeeper-hosted bundled ALTCHA v3 widget with `PBKDF2/SHA-256` as the default challenge algorithm
@@ -376,10 +392,10 @@ Use the `CRYKEEPER_CAP_ADMIN_KEY` provided in your `.env` file if you want a cus
 Then restart the cryKeeper container (or the whole stack) so it picks up the new Cap configuration:
 
 ```bash
-docker compose restart cryKeeper
+docker compose restart crykeeper
 ```
 
-The checked-in demo config keeps the Cap demos on localhost and cap.localhost, adds a fully protected Dummy host, and keeps the dedicated provider-specific hosts for Dummy, ALTCHA, and hCaptcha:
+The checked-in demo config keeps the Cap demos on localhost and cap.localhost, adds a fully protected Dummy host, keeps the dedicated provider-specific hosts for Dummy, ALTCHA, and hCaptcha, and exposes the internal dashboard on a separate demo hostname:
 
 - `https://localhost:8443/protected/` uses Cap through the local `/cap` service
 - `https://cap.localhost:8443/protected/` uses Cap through `/cap-check`
@@ -387,6 +403,7 @@ The checked-in demo config keeps the Cap demos on localhost and cap.localhost, a
 - `https://dummy.localhost:8443/protected/` uses Dummy mode through `/dummy-check`
 - `https://altcha.localhost:8443/protected/` uses ALTCHA with challenges generated by the cryKeeper itself
 - `https://hcaptcha.localhost:8443/protected/` uses hCaptcha with the public test keys and therefore requires internet access
+- `https://dashboard.localhost:8443/` serves the internal observability dashboard and `https://dashboard.localhost:8443/metrics` exposes the aggregated Prometheus metrics
 
 Then open:
 
@@ -396,6 +413,7 @@ Then open:
 - `https://dummy.localhost:8443/protected/`
 - `https://altcha.localhost:8443/protected/`
 - `https://hcaptcha.localhost:8443/protected/`
+- `https://dashboard.localhost:8443/`
 - `https://localhost:8443/protected/skip-route/`
 
 ## Troubleshooting

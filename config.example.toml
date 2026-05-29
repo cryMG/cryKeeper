@@ -99,7 +99,8 @@ verification_mode = "dummy"
 #
 # This must start with / and must not end with /. Keep nginx, auth_request, and
 # any external links aligned with the same prefix. The bundled demo stack keeps
-# its default host fixed on /crykeeper.
+# its default host fixed on /crykeeper. The fixed internal observability prefix
+# /_crykeeper is reserved and must not be reused here.
 path_prefix = "/crykeeper"
 
 # Maximum accepted length of the original return path.

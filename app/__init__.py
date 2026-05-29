@@ -3,8 +3,9 @@ import logging
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .config import load_settings_bundle
+from .config import INTERNAL_OBSERVABILITY_PATH, load_settings_bundle
 from .i18n import validate_catalogs
+from .observability import CryKeeperObservability, observability
 from .proxy import TrustedProxyHeadersMiddleware
 from .ratelimit import create_rate_limiter
 from .routes import crykeeper
@@ -38,9 +39,14 @@ def create_app() -> Flask:
   if settings.trusted_proxy_cidrs:
     wsgi_app = TrustedProxyHeadersMiddleware(wsgi_app, settings.trusted_proxy_cidrs)
   app.wsgi_app = wsgi_app
+  observability_extension = CryKeeperObservability()
+  app.extensions["crykeeper_observability"] = observability_extension
   app.extensions["crykeeper_rate_limiter"] = create_rate_limiter(
-    settings_bundle, app.logger
+    settings_bundle,
+    app.logger,
+    backend_failure_callback=observability_extension.record_rate_limit_backend_failure,
   )
+  app.register_blueprint(observability, url_prefix=INTERNAL_OBSERVABILITY_PATH)
   for index, path_prefix in enumerate(settings_bundle.path_prefixes):
     register_options = {"url_prefix": path_prefix}
     if index > 0:

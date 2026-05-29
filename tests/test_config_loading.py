@@ -570,6 +570,23 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("deutscher footer", settings.footer_html.resolve("de-AT"))
     self.assertEqual("english footer", settings.footer_html.resolve("fr-CA"))
 
+  def test_path_prefix_must_not_overlap_internal_observability_prefix(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+                path_prefix = "/_crykeeper"
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(
+          RuntimeError, "reserved for internal observability"
+        ):
+          load_settings()
+
 
 if __name__ == "__main__":
   unittest.main()

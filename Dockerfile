@@ -21,6 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     CRYKEEPER_CONFIG_FILE=/app/config.toml \
+    CRYKEEPER_PROMETHEUS_MULTIPROC_DIR=/tmp/crykeeper-prometheus \
     CRYKEEPER_GUNICORN_WORKERS=2 \
     CRYKEEPER_GUNICORN_THREADS=4
 
@@ -32,14 +33,15 @@ RUN groupadd --system crykeeper \
 WORKDIR /app
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
-
 COPY app ./app
-COPY wsgi.py ./
+COPY entrypoint.sh gunicorn.conf.py wsgi.py ./
+
+RUN pip install -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt \
+    && chmod 755 /app/entrypoint.sh
 
 USER crykeeper
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:5000 --workers \"${CRYKEEPER_GUNICORN_WORKERS:-2}\" --threads \"${CRYKEEPER_GUNICORN_THREADS:-4}\" --access-logfile - --error-logfile - wsgi:app"]
+ENTRYPOINT ["/app/entrypoint.sh"]

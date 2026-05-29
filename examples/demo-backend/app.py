@@ -85,6 +85,16 @@ def _current_site_links() -> list[tuple[str, str]]:
   ]
 
 
+def _internal_links() -> list[tuple[str, str]]:
+  """Return quick links to the internal cryKeeper pages."""
+  scheme = _external_scheme()
+  port = _request_port()
+  return [
+    ("Dashboard", f"{scheme}://dashboard.localhost:{port}/"),
+    ("Prometheus metrics", f"{scheme}://dashboard.localhost:{port}/_crykeeper/metrics"),
+  ]
+
+
 def _site_content() -> tuple[str, str, str]:
   """Select the headline, description, and accent color for the current demo host."""
   host = _normalized_host()
@@ -138,6 +148,9 @@ def _render_page(
   )
   links = "".join(
     f'<li><a href="{url}">{label}</a></li>' for label, url in _site_links()
+  )
+  internal_links = "".join(
+    f'<li><a href="{url}">{label}</a></li>' for label, url in _internal_links()
   )
   return f"""
 <!doctype html>
@@ -203,6 +216,8 @@ def _render_page(
     <ul>{current_site_links}</ul>
     <p>Try the demo websites:</p>
     <ul>{links}</ul>
+    <p>View the Dashboard or Metrics:</p>
+    <ul>{internal_links}</ul>
   </article>
 </body>
 </html>

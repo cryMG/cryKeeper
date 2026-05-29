@@ -1,5 +1,6 @@
 import hmac
 import re
+import time
 from http import HTTPStatus
 from ipaddress import ip_address
 from urllib.parse import urlencode, urlsplit
@@ -60,9 +61,14 @@ KNOWN_SEARCH_ENGINE_USER_AGENTS = (
 def check() -> tuple[str, int] | Response:
   """Validate the signed cookie for nginx auth_request subrequests."""
   settings = _settings()
+  request_host = _request_host_name()
   original_uri = _original_request_uri()
   bypass_reason = _auth_bypass_reason(settings)
   if bypass_reason is not None:
+    _observability().record_auth_bypass(
+      request_host, _bypass_metric_reason(bypass_reason)
+    )
+    _observability().record_check(request_host, "bypass")
     current_app.logger.info(
       "Bypassing auth",
       extra={
@@ -87,6 +93,7 @@ def check() -> tuple[str, int] | Response:
   )
 
   if payload is not None:
+    _observability().record_check(request_host, "allowed")
     return "", HTTPStatus.NO_CONTENT
 
   # nginx reads this header and converts the 401 into a redirect to /crykeeper/challenge.
@@ -94,6 +101,7 @@ def check() -> tuple[str, int] | Response:
   response.headers["X-Auth-Redirect"] = _crykeeper_url(
     settings, "/challenge", return_path=return_path
   )
+  _observability().record_check(request_host, "challenge_required")
   current_app.logger.info(
     "Access denied, redirecting to challenge", extra={"return_path": return_path}
   )
@@ -104,6 +112,7 @@ def check() -> tuple[str, int] | Response:
 def challenge() -> Response:
   """Render the interstitial page that triggers the active verification provider."""
   settings = _settings()
+  request_host = _request_host_name()
   return_path = normalize_return_path(
     request.args.get("return"),
     settings.blocked_return_prefixes,
@@ -112,12 +121,18 @@ def challenge() -> Response:
 
   secure_transport_response = _enforce_secure_transport(return_path)
   if secure_transport_response is not None:
+    _observability().record_challenge(
+      request_host, settings.verification_mode, "insecure_transport"
+    )
     return secure_transport_response
 
   rate_limit_response = _rate_limit_response("challenge", return_path)
   if rate_limit_response is not None:
     return rate_limit_response
 
+  _observability().record_challenge(
+    request_host, settings.verification_mode, "rendered"
+  )
   return _render_challenge(return_path)
 
 
@@ -125,6 +140,8 @@ def challenge() -> Response:
 def verify() -> Response:
   """Complete the active provider verification and issue the signed human cookie."""
   settings = _settings()
+  request_host = _request_host_name()
+  verify_started_at = time.perf_counter()
   return_path = normalize_return_path(
     request.form.get("return"),
     settings.blocked_return_prefixes,
@@ -133,13 +150,40 @@ def verify() -> Response:
 
   secure_transport_response = _enforce_secure_transport(return_path)
   if secure_transport_response is not None:
+    _observability().record_verify_result(
+      request_host,
+      settings.verification_mode,
+      "insecure_transport",
+      "insecure_transport",
+    )
+    _observability().record_verify_duration(
+      request_host,
+      settings.verification_mode,
+      "insecure_transport",
+      time.perf_counter() - verify_started_at,
+    )
     return secure_transport_response
 
   rate_limit_response = _rate_limit_response("verify", return_path)
   if rate_limit_response is not None:
+    _observability().record_verify_duration(
+      request_host,
+      settings.verification_mode,
+      "rate_limited",
+      time.perf_counter() - verify_started_at,
+    )
     return rate_limit_response
 
+  provider_started_at = time.perf_counter()
   verification_result = _verification_result(settings)
+  verification_outcome = _verification_metric_outcome(verification_result)
+  _observability().record_provider_result(
+    request_host,
+    settings.verification_mode,
+    "verify",
+    verification_outcome,
+    time.perf_counter() - provider_started_at,
+  )
   if not verification_result.success:
     error_key = verification_result.error_key or (
       "error_unavailable" if verification_result.retryable else "error_failed"
@@ -160,6 +204,18 @@ def verify() -> Response:
         "verification_payload": verification_result.payload or {},
       },
     )
+    _observability().record_verify_result(
+      request_host,
+      settings.verification_mode,
+      verification_outcome,
+      _verification_metric_reason(verification_result),
+    )
+    _observability().record_verify_duration(
+      request_host,
+      settings.verification_mode,
+      verification_outcome,
+      time.perf_counter() - verify_started_at,
+    )
     return _render_challenge(
       return_path,
       error_key=error_key,
@@ -174,6 +230,18 @@ def verify() -> Response:
   response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
   _set_verification_cookie(response, settings, token)
   response.headers["Cache-Control"] = "no-store"
+  _observability().record_verify_result(
+    request_host,
+    settings.verification_mode,
+    "success",
+    "none",
+  )
+  _observability().record_verify_duration(
+    request_host,
+    settings.verification_mode,
+    "success",
+    time.perf_counter() - verify_started_at,
+  )
   log_message = {
     "cap": "Cap verification completed",
     "hcaptcha": "hCaptcha verification completed",
@@ -187,6 +255,7 @@ def verify() -> Response:
 def altcha_challenge() -> Response:
   """Return one fresh ALTCHA challenge when ALTCHA mode is active for the host."""
   settings = _settings()
+  request_host = _request_host_name()
   if not settings.altcha_enabled:
     response = jsonify({"error": "ALTCHA mode is not active for this host."})
     response.status_code = HTTPStatus.NOT_FOUND
@@ -214,7 +283,16 @@ def altcha_challenge() -> Response:
       retry_after_seconds=decision.retry_after_seconds,
     )
 
-  response = jsonify(create_altcha_challenge(settings))
+  challenge_started_at = time.perf_counter()
+  challenge_payload = create_altcha_challenge(settings)
+  _observability().record_provider_result(
+    request_host,
+    "altcha",
+    "challenge",
+    "success",
+    time.perf_counter() - challenge_started_at,
+  )
+  response = jsonify(challenge_payload)
   response.status_code = HTTPStatus.OK
   response.headers["Cache-Control"] = "no-store"
   return response
@@ -271,6 +349,7 @@ def _render_challenge(
       rate_limited=rate_limited,
       verification_mode=settings.verification_mode,
       verify_action_url=_crykeeper_path(settings, "/verify"),
+      challenge_shared_style_url=_crykeeper_path(settings, "/static/ui.css"),
       challenge_shared_script_url=_crykeeper_path(
         settings, "/static/challenge-common.js"
       ),
@@ -325,6 +404,22 @@ def _rate_limit_response(scope: str, return_path: str) -> Response | None:
   if decision is None:
     return None
 
+  settings = _settings()
+  request_host = _request_host_name()
+  if scope == "challenge":
+    _observability().record_challenge(
+      request_host,
+      settings.verification_mode,
+      "rate_limited",
+    )
+  else:
+    _observability().record_verify_result(
+      request_host,
+      settings.verification_mode,
+      "rate_limited",
+      "rate_limited",
+    )
+
   return _render_challenge(
     return_path,
     error_key="error_rate_limited",
@@ -344,6 +439,12 @@ def _rate_limit_decision(scope: str) -> object | None:
   )
   if decision.allowed:
     return None
+
+  _observability().record_rate_limit_hit(
+    _request_host_name(),
+    scope,
+    rate_limiter.metrics_backend_name,
+  )
 
   current_app.logger.warning(
     "Rate limit exceeded",
@@ -664,6 +765,11 @@ def _settings() -> object:
   return current_app.config["SETTINGS_BUNDLE"].settings_for_host(request.host)
 
 
+def _observability() -> object:
+  """Resolve the shared metrics collector stored on the Flask app."""
+  return current_app.extensions["crykeeper_observability"]
+
+
 def _challenge_template_context(settings: object) -> dict[str, object]:
   """Return provider-specific template and script settings for the challenge page."""
   if settings.cap_enabled:
@@ -816,3 +922,26 @@ def _crykeeper_url(settings: object, suffix: str, return_path: str) -> str:
   """Build a crykeeper-local URL with query parameters without relying on one endpoint name."""
   path = _crykeeper_path(settings, suffix)
   return f"{path}?{urlencode({'return': return_path})}"
+
+
+def _bypass_metric_reason(reason: str) -> str:
+  """Collapse configured bypass details into low-cardinality metric labels."""
+  return reason.split(":", 1)[0]
+
+
+def _verification_metric_outcome(result: object) -> str:
+  """Map provider results to one stable outcome vocabulary for metrics."""
+  if result.success:
+    return "success"
+  if result.retryable:
+    return "retryable_failure"
+  if result.error_key == "error_incomplete":
+    return "incomplete"
+  return "failed"
+
+
+def _verification_metric_reason(result: object) -> str:
+  """Expose only low-cardinality verification reasons in metrics."""
+  if result.success:
+    return "none"
+  return result.error_key or ("retryable" if result.retryable else "failed")

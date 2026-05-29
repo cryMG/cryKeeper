@@ -4,6 +4,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from threading import Lock
+from typing import Callable
 
 import redis
 from redis.exceptions import RedisError
@@ -230,12 +231,17 @@ class FallbackRateLimiter:
   """Use Valkey when available and fall back to local memory on backend failures."""
 
   def __init__(
-    self, primary: ValkeyRateLimiter, fallback: InMemoryRateLimiter, logger
+    self,
+    primary: ValkeyRateLimiter,
+    fallback: InMemoryRateLimiter,
+    logger,
+    backend_failure_callback: Callable[[str], None] | None = None,
   ) -> None:
     self._primary = primary
     self._fallback = fallback
     self._logger = logger
     self._last_error_log_at = 0.0
+    self._backend_failure_callback = backend_failure_callback
 
   def check(self, key: str, rule: RateLimitRule) -> RateLimitDecision:
     try:
@@ -245,6 +251,9 @@ class FallbackRateLimiter:
       return self._fallback.check(key, rule)
 
   def _log_backend_failure(self, exc: RateLimitBackendFailure) -> None:
+    if self._backend_failure_callback is not None:
+      self._backend_failure_callback("valkey")
+
     now = time.monotonic()
     if now - self._last_error_log_at < 60:
       return
@@ -260,7 +269,13 @@ class WebsiteRateLimiter:
   """Resolve the shared backend once while keeping website buckets separated by key."""
 
   def __init__(
-    self, backend: str, valkey_url: str, key_prefix: str, max_entries: int, logger
+    self,
+    backend: str,
+    valkey_url: str,
+    key_prefix: str,
+    max_entries: int,
+    logger,
+    backend_failure_callback: Callable[[str], None] | None = None,
   ) -> None:
     self._backend = backend
     self._valkey_url = (valkey_url or "").strip()
@@ -284,6 +299,7 @@ class WebsiteRateLimiter:
       primary,
       InMemoryRateLimiter(max_entries),
       logger,
+      backend_failure_callback=backend_failure_callback,
     )
 
   def check(self, key: str, rule: RateLimitRule) -> RateLimitDecision:
@@ -291,8 +307,18 @@ class WebsiteRateLimiter:
       return self._memory_limiter.check(key, rule)
     return self._shared_limiter.check(key, rule)
 
+  @property
+  def metrics_backend_name(self) -> str:
+    if self._shared_limiter is None:
+      return "memory"
+    return "valkey"
 
-def create_rate_limiter(settings_source: object, logger) -> WebsiteRateLimiter:
+
+def create_rate_limiter(
+  settings_source: object,
+  logger,
+  backend_failure_callback: Callable[[str], None] | None = None,
+) -> WebsiteRateLimiter:
   """Build the shared rate-limit backend with one global Valkey URL if configured."""
   settings = getattr(settings_source, "default_settings", settings_source)
   return WebsiteRateLimiter(
@@ -301,4 +327,5 @@ def create_rate_limiter(settings_source: object, logger) -> WebsiteRateLimiter:
     settings.rate_limit_valkey_prefix,
     settings.rate_limit_max_entries,
     logger,
+    backend_failure_callback=backend_failure_callback,
   )
