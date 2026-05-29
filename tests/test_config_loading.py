@@ -251,8 +251,12 @@ class ConfigLoadingTests(unittest.TestCase):
       ((None, "^/from-file/"),),
       tuple((rule.method, rule.pattern) for rule in settings.skip_routes),
     )
-    self.assertEqual(("^FileBot$",), tuple(rule.pattern for rule in settings.bypass_user_agents))
-    self.assertEqual(("2001:db8::/32",), tuple(rule.value for rule in settings.bypass_ips))
+    self.assertEqual(
+      ("^FileBot$",), tuple(rule.pattern for rule in settings.bypass_user_agents)
+    )
+    self.assertEqual(
+      ("2001:db8::/32",), tuple(rule.value for rule in settings.bypass_ips)
+    )
     self.assertTrue(settings.allow_known_search_engines)
     self.assertEqual("valkey", settings.rate_limit_backend)
     self.assertEqual("/from-file", settings.path_prefix)
@@ -267,6 +271,12 @@ class ConfigLoadingTests(unittest.TestCase):
       settings.altcha_effective_script_url,
     )
     self.assertEqual("PBKDF2/SHA-256", settings.altcha_algorithm)
+
+  def test_default_cookie_ttl_is_24_hours(self):
+    with patch.dict(os.environ, {}, clear=True):
+      settings = load_settings()
+
+    self.assertEqual(24 * 60 * 60, settings.cookie_ttl_seconds)
 
   def test_unknown_toml_keys_fail_fast(self):
     with tempfile.TemporaryDirectory() as temp_dir:

@@ -895,7 +895,7 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
     cookie_ttl_seconds=_read_int(
       config_source,
       _env_name("HUMAN_COOKIE_TTL_SECONDS"),
-      7 * 24 * 60 * 60,
+      24 * 60 * 60,
     ),
     cookie_secure=cookie_secure,
     allow_insecure_local_cap=_read_bool(

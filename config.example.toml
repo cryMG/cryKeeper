@@ -35,9 +35,9 @@ human_cookie_name = "crykeeper_verified"
 
 # Lifetime of a successful human verification, in seconds.
 #
-# 604800 seconds equals 7 days. Shorter values reduce replay exposure but cause
+# 86400 seconds equals 24 hours. Shorter values reduce replay exposure but cause
 # users to solve the challenge more often.
-human_cookie_ttl_seconds = 604800
+human_cookie_ttl_seconds = 86400
 
 # Whether the verification cookie is marked Secure.
 #
