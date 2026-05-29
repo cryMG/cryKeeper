@@ -20,6 +20,11 @@
         `${formatInteger(snapshot.verifySuccess)} successful verifies out of ${formatInteger(snapshot.verifyTotal)}.`,
       value: (snapshot) => formatRate(snapshot.verifySuccess, snapshot.verifyTotal),
     },
+    unsolved_challenges: {
+      detail: () =>
+        "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
+      value: (snapshot) => formatInteger(snapshot.unsolvedChallenges),
+    },
     skip_routes: {
       detail: () => "Requests bypassed by configured skip_routes since startup.",
       value: (snapshot) => formatInteger(snapshot.skipRoutes),
@@ -337,6 +342,10 @@
       skipRoutes: sumLabeledSamples(samples, "crykeeper_auth_bypass_total", {
         reason: "skip_route",
       }),
+      unsolvedChallenges: sumSamples(
+        samples,
+        "crykeeper_unsolved_challenge_attempts_total",
+      ),
       verifyRows: buildVerifyRows(samples),
       verifySuccess: totals.success,
       verifyTotal: totals.total,

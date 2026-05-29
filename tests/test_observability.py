@@ -50,6 +50,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     metrics_body = metrics_response.get_data(as_text=True)
     self.assertIn("crykeeper_check_requests_total", metrics_body)
     self.assertIn("crykeeper_challenge_requests_total", metrics_body)
+    self.assertIn("crykeeper_unsolved_challenge_attempts", metrics_body)
     self.assertIn("crykeeper_verify_attempts_total", metrics_body)
     self.assertIn('host="localhost"', metrics_body)
     self.assertIn('provider="dummy"', metrics_body)
@@ -88,14 +89,25 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       "/_crykeeper/dashboard",
       base_url="http://localhost",
     )
+    metrics_response = client.get(
+      "/_crykeeper/metrics",
+      base_url="http://localhost",
+    )
 
     self.assertEqual(204, bypass_response.status_code)
     self.assertEqual(429, blocked_response.status_code)
     self.assertEqual(200, dashboard_response.status_code)
+    self.assertEqual(200, metrics_response.status_code)
 
     dashboard_body = dashboard_response.get_data(as_text=True)
+    metrics_body = metrics_response.get_data(as_text=True)
     self.assertIn("cryKeeper Dashboard", dashboard_body)
     self.assertIn("Skip routes", dashboard_body)
+    self.assertIn("Unsolved challenges", dashboard_body)
+    self.assertIn(
+      "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
+      dashboard_body,
+    )
     self.assertIn(
       "Requests bypassed by configured skip_routes since startup.", dashboard_body
     )
@@ -122,6 +134,8 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       "custom footer that should not appear on the dashboard",
       dashboard_body,
     )
+    self.assertIn("crykeeper_unsolved_challenge_attempts_total", metrics_body)
+    self.assertIn('reason="rate_limited"', metrics_body)
 
   def test_metrics_are_not_served_below_public_path_prefix(self):
     app = self._create_app()

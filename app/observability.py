@@ -85,6 +85,12 @@ class CryKeeperObservability:
       buckets=_LATENCY_BUCKETS,
       registry=self._registry,
     )
+    self._unsolved_challenge_attempts = Counter(
+      "crykeeper_unsolved_challenge_attempts",
+      "Explicit challenge attempts that ended without a successful verification.",
+      labelnames=("host", "provider", "reason"),
+      registry=self._registry,
+    )
     self._rate_limit_hits = Counter(
       "crykeeper_rate_limit_hits",
       "Requests blocked by the challenge or verify rate limit.",
@@ -158,6 +164,14 @@ class CryKeeperObservability:
       outcome=outcome,
     ).observe(max(duration_seconds, 0.0))
 
+  def record_unsolved_challenge(self, host: str, provider: str, reason: str) -> None:
+    """Count one explicit challenge attempt that did not end in success."""
+    self._unsolved_challenge_attempts.labels(
+      host=_metric_host(host),
+      provider=(provider or "dummy").lower(),
+      reason=reason or "unknown",
+    ).inc()
+
   def record_rate_limit_hit(self, host: str, scope: str, backend: str) -> None:
     """Count one request blocked by the configured rate limiter."""
     self._rate_limit_hits.labels(
@@ -185,6 +199,9 @@ class CryKeeperObservability:
       "crykeeper_auth_bypass_total",
       reason="skip_route",
     )
+    unsolved_challenges = _sum_samples(
+      samples, "crykeeper_unsolved_challenge_attempts_total"
+    )
     rate_limit_hits = _sum_samples(samples, "crykeeper_rate_limit_hits_total")
     backend_failures = _sum_samples(
       samples, "crykeeper_rate_limit_backend_failures_total"
@@ -204,6 +221,12 @@ class CryKeeperObservability:
         "title": "Verify success rate",
         "value": _format_rate(verify_success, verify_total),
         "detail": f"{_format_integer(verify_success)} successful verifies out of {_format_integer(verify_total)}.",
+      },
+      {
+        "key": "unsolved_challenges",
+        "title": "Unsolved challenges",
+        "value": _format_integer(unsolved_challenges),
+        "detail": "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
       },
       {
         "key": "skip_routes",

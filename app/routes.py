@@ -124,6 +124,11 @@ def challenge() -> Response:
     _observability().record_challenge(
       request_host, settings.verification_mode, "insecure_transport"
     )
+    _observability().record_unsolved_challenge(
+      request_host,
+      settings.verification_mode,
+      "insecure_transport",
+    )
     return secure_transport_response
 
   rate_limit_response = _rate_limit_response("challenge", return_path)
@@ -154,6 +159,11 @@ def verify() -> Response:
       request_host,
       settings.verification_mode,
       "insecure_transport",
+      "insecure_transport",
+    )
+    _observability().record_unsolved_challenge(
+      request_host,
+      settings.verification_mode,
       "insecure_transport",
     )
     _observability().record_verify_duration(
@@ -208,6 +218,11 @@ def verify() -> Response:
       request_host,
       settings.verification_mode,
       verification_outcome,
+      _verification_metric_reason(verification_result),
+    )
+    _observability().record_unsolved_challenge(
+      request_host,
+      settings.verification_mode,
       _verification_metric_reason(verification_result),
     )
     _observability().record_verify_duration(
@@ -420,11 +435,21 @@ def _rate_limit_response(scope: str, return_path: str) -> Response | None:
       settings.verification_mode,
       "rate_limited",
     )
+    _observability().record_unsolved_challenge(
+      request_host,
+      settings.verification_mode,
+      "rate_limited",
+    )
   else:
     _observability().record_verify_result(
       request_host,
       settings.verification_mode,
       "rate_limited",
+      "rate_limited",
+    )
+    _observability().record_unsolved_challenge(
+      request_host,
+      settings.verification_mode,
       "rate_limited",
     )
 

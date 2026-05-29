@@ -103,7 +103,7 @@ main.dashboard-shell {
 
 .dashboard-shell .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1rem;
   margin-top: 1.25rem;
 }
@@ -206,6 +206,10 @@ main.dashboard-shell {
 @media (max-width: 720px) {
   main.dashboard-shell {
     width: 100%;
+  }
+
+  .dashboard-shell .cards {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-shell .hero,
