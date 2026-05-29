@@ -257,6 +257,7 @@ Non-empty environment variables override only the shared defaults. They do not c
 Requests that match any of the following settings are allowed through `GET <path_prefix>/check` immediately and do not need a valid verification cookie:
 
 - `skip_routes`: bypasses based on the original request path and optional HTTP method.
+- `bypass_headers`: exact header/value pairs matched against the current request headers. This is suitable for automation clients that can send a dedicated token header themselves. Token values must be at least 32 characters long.
 - `bypass_user_agents`: Python regexes matched against the current `User-Agent` header.
 - `bypass_ips`: client IPs or CIDR ranges matched against the sanitized client address after trusted proxy handling.
 - `allow_known_search_engines`: enables a built-in `User-Agent` matcher for common search crawlers such as Googlebot, Bingbot, DuckDuckBot, Yahoo Slurp, YandexBot, Baiduspider, Applebot, PetalBot, and SeznamBot.
@@ -265,6 +266,9 @@ TOML example:
 
 ```toml
 [crykeeper]
+bypass_headers = [
+  "X-CryKeeper-Token=0123456789abcdef0123456789abcdef", "X-CryKeeper-Token=fedcba9876543210fedcba9876543210",
+]
 bypass_user_agents = ["^MyMonitoringBot/", "(?i)uptimerobot"]
 bypass_ips = ["203.0.113.10", "2001:db8::/32"]
 allow_known_search_engines = true
@@ -273,12 +277,13 @@ allow_known_search_engines = true
 Environment variable example:
 
 ```bash
+export CRYKEEPER_BYPASS_HEADERS='X-CryKeeper-Token=0123456789abcdef0123456789abcdef,X-CryKeeper-Token=fedcba9876543210fedcba9876543210'
 export CRYKEEPER_BYPASS_USER_AGENTS='^MyMonitoringBot/,(?i)uptimerobot'
 export CRYKEEPER_BYPASS_IPS='203.0.113.10,2001:db8::/32'
 export CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES=true
 ```
 
-Use `bypass_ips` when you want the strongest built-in trust signal. `bypass_user_agents` and `allow_known_search_engines` are convenient, but both ultimately rely on a client-controlled header.
+Use `bypass_ips` when you want the strongest built-in trust signal. `bypass_headers` works well for scripts, CI jobs, uptime checks, or other automation clients that can attach a long random token such as `X-CryKeeper-Token: ...` themselves. Tokens must be at least 32 characters long. Treat them as bearer secrets, not as trustworthy identity claims: anyone who knows a token can bypass the check, so keep tokens random, rotate them when needed, and use them only over HTTPS. If your public edge injects, strips, or rewrites that header, keep that behavior deliberate and consistent. `bypass_user_agents` and `allow_known_search_engines` are convenient, but both ultimately rely on a client-controlled header.
 
 ## When Valkey Makes Sense
 
@@ -302,7 +307,8 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 - Serve cryKeeper behind HTTPS and set `human_cookie_secure = true` in production
 - Keep the reverse proxy prefix aligned with `path_prefix`
 - Set `trusted_proxy_hops` and `trusted_proxy_cidrs` to match your real proxy chain whenever a reverse proxy supplies forwarded headers
-- Decide explicitly whether trusted crawlers or monitoring systems should bypass the human check via `bypass_ips`, `bypass_user_agents`, or `allow_known_search_engines`
+- Decide explicitly whether trusted crawlers, monitoring systems, or upstreams should bypass the human check via `bypass_ips`, `bypass_headers`, `bypass_user_agents`, or `allow_known_search_engines`
+- If you enable `bypass_headers`, use long random tokens with at least 32 characters over HTTPS and keep any proxy-side stripping, forwarding, or injection deliberate and consistent
 - If you run multiple cryKeeper workers or replicas, configure Valkey for shared rate limiting via `rate_limit_backend` and `rate_limit_valkey_url`; this includes the default Docker image, which starts Gunicorn with 2 workers
 - In Cap mode, set `cap_public_base_url`, `cap_site_key`, and `cap_secret_key`, plus `cap_internal_base_url` if server-side verification should use a different route
 - In hCaptcha mode, set `hcaptcha_site_key` and `hcaptcha_secret_key`; `hcaptcha_script_url` and `hcaptcha_verify_url` default to the official endpoints
@@ -399,6 +405,7 @@ Then open:
 - If `ip-user-agent` binding is unstable, verify `trusted_proxy_hops`, optional `trusted_proxy_cidrs`, and your forwarded-header setup
 - If a custom translation does not appear, check the JSON filename, keep English complete, and restart the container after adding or changing files
 - If `skip_routes` does not bypass the challenge, verify the regex against the original request path and make sure nginx forwards `X-Original-Method`
+- If `bypass_headers` does not match as expected, verify the exact header name and value plus whether your reverse proxy strips, forwards, or injects that header as intended
 - If `bypass_ips` does not match as expected, verify `trusted_proxy_hops`, `trusted_proxy_cidrs`, and which client IP cryKeeper actually sees after proxy sanitization
 
 ## License

@@ -62,6 +62,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 skip_routes = ["^/public/", "GET=^/assets/", "POST=^/api/"]
                 bypass_user_agents = ["^TestBot/.*$", "(?i)friendlycrawler"]
                 bypass_ips = ["203.0.113.10", "2001:db8::/32"]
+                bypass_headers = ["X-Bypass-Token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "X-Bypass-Token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
                 allow_known_search_engines = true
                 path_prefix = "/human-check"
                 """,
@@ -145,6 +146,13 @@ class ConfigLoadingTests(unittest.TestCase):
       ("203.0.113.10", "2001:db8::/32"),
       tuple(rule.value for rule in settings.bypass_ips),
     )
+    self.assertEqual(
+      (
+        ("X-Bypass-Token", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        ("X-Bypass-Token", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+      ),
+      tuple((rule.header_name, rule.value) for rule in settings.bypass_headers),
+    )
     self.assertTrue(settings.allow_known_search_engines)
     self.assertEqual("/human-check", settings.path_prefix)
 
@@ -161,6 +169,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 skip_routes = ["^/file-only/"]
                 bypass_user_agents = ["^FileBot$"]
                 bypass_ips = ["203.0.113.0/24"]
+                bypass_headers = ["X-Bypass-Token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
                 allow_known_search_engines = false
                 trusted_proxy_cidrs = ["10.0.0.0/8"]
                 rate_limit_backend = "memory"
@@ -178,6 +187,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_SKIP_ROUTES": "GET=^/assets/,POST=^/api/",
           "CRYKEEPER_BYPASS_USER_AGENTS": "^EnvBot$,^EnvCrawler/.*$",
           "CRYKEEPER_BYPASS_IPS": "198.51.100.7,2001:db8::1",
+          "CRYKEEPER_BYPASS_HEADERS": "X-Bypass-Token=cccccccccccccccccccccccccccccccc,X-Bypass-Token=dddddddddddddddddddddddddddddddd",
           "CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES": "true",
           "CRYKEEPER_TRUSTED_PROXY_CIDRS": "203.0.113.0/24",
           "CRYKEEPER_RATE_LIMIT_BACKEND": "valkey",
@@ -203,6 +213,13 @@ class ConfigLoadingTests(unittest.TestCase):
       ("198.51.100.7", "2001:db8::1"),
       tuple(rule.value for rule in settings.bypass_ips),
     )
+    self.assertEqual(
+      (
+        ("X-Bypass-Token", "cccccccccccccccccccccccccccccccc"),
+        ("X-Bypass-Token", "dddddddddddddddddddddddddddddddd"),
+      ),
+      tuple((rule.header_name, rule.value) for rule in settings.bypass_headers),
+    )
     self.assertTrue(settings.allow_known_search_engines)
     self.assertEqual(("203.0.113.0/24",), settings.trusted_proxy_cidrs)
     self.assertEqual("valkey", settings.rate_limit_backend)
@@ -220,6 +237,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 skip_routes = ["^/from-file/"]
                 bypass_user_agents = ["^FileBot$"]
                 bypass_ips = ["2001:db8::/32"]
+                bypass_headers = ["X-Bypass-Token=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]
                 allow_known_search_engines = true
                 rate_limit_backend = "valkey"
                 path_prefix = "/from-file"
@@ -236,6 +254,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_SKIP_ROUTES": "  ",
           "CRYKEEPER_BYPASS_USER_AGENTS": "",
           "CRYKEEPER_BYPASS_IPS": "  ",
+          "CRYKEEPER_BYPASS_HEADERS": "   ",
           "CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES": "",
           "CRYKEEPER_RATE_LIMIT_BACKEND": "",
           "CRYKEEPER_PATH_PREFIX": "",
@@ -256,6 +275,10 @@ class ConfigLoadingTests(unittest.TestCase):
     )
     self.assertEqual(
       ("2001:db8::/32",), tuple(rule.value for rule in settings.bypass_ips)
+    )
+    self.assertEqual(
+      (("X-Bypass-Token", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),),
+      tuple((rule.header_name, rule.value) for rule in settings.bypass_headers),
     )
     self.assertTrue(settings.allow_known_search_engines)
     self.assertEqual("valkey", settings.rate_limit_backend)
@@ -411,6 +434,36 @@ class ConfigLoadingTests(unittest.TestCase):
 
       with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
         with self.assertRaisesRegex(RuntimeError, "invalid IP or CIDR"):
+          load_settings()
+
+  def test_invalid_bypass_header_fails_fast(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+                bypass_headers = ["Bad Header=token"]
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "invalid header name"):
+          load_settings()
+
+  def test_bypass_header_token_must_be_at_least_32_characters(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+                bypass_headers = ["X-Bypass-Token=too-short-token"]
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "at least 32 characters"):
           load_settings()
 
   def test_website_overrides_reject_global_only_keys(self):

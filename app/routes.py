@@ -1,3 +1,4 @@
+import hmac
 import re
 from http import HTTPStatus
 from ipaddress import ip_address
@@ -581,6 +582,19 @@ def _bypass_ip_reason(settings: object) -> str | None:
   return None
 
 
+def _bypass_header_reason(settings: object) -> str | None:
+  """Return the matched header bypass rule, if one applies."""
+  for rule in settings.bypass_headers:
+    header_value = request.headers.get(rule.header_name)
+    if header_value is None:
+      continue
+
+    if hmac.compare_digest(header_value, rule.value):
+      return f"bypass_header:{rule.header_name}"
+
+  return None
+
+
 def _bypass_user_agent_reason(settings: object) -> str | None:
   """Return the matched user-agent bypass rule, if one applies."""
   user_agent = _request_user_agent()
@@ -614,6 +628,10 @@ def _auth_bypass_reason(settings: object) -> str | None:
   """Return the first configured auth bypass reason for the current request."""
   if _skip_auth_route_matches(settings):
     return "skip_route"
+
+  header_reason = _bypass_header_reason(settings)
+  if header_reason is not None:
+    return header_reason
 
   ip_reason = _bypass_ip_reason(settings)
   if ip_reason is not None:

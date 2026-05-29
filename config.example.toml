@@ -148,6 +148,24 @@ bypass_user_agents = []
 # Exact IPs are allowed and are normalized internally like /32 or /128 networks.
 bypass_ips = []
 
+# Optional exact header/value pairs that bypass the auth check entirely.
+#
+# Each entry uses HEADER=VALUE syntax. Header names are matched case-
+# insensitively and values are matched exactly. Token values must be at least
+# 32 characters long.
+#
+# This is intended for automation clients that can send a long random token
+# themselves, for example X-CryKeeper-Token=... . Treat it like a bearer secret:
+# anyone who knows it can bypass the check. If your edge proxy injects or strips
+# the header instead, keep that behavior consistent.
+#
+# Example with multiple tokens for the same header name:
+# bypass_headers = [
+#   "X-CryKeeper-Token=0123456789abcdef0123456789abcdef",
+#   "X-CryKeeper-Token=fedcba9876543210fedcba9876543210",
+# ]
+bypass_headers = []
+
 # Whether a built-in set of common search-engine crawler User-Agents should
 # always bypass the auth check.
 #
@@ -318,6 +336,7 @@ footer_html.de = 'Cap-Demo powered by <strong>cryMG</strong>'
 cap_site_key = "other-cap-site-key"
 cap_secret_key = "other-cap-secret-key"
 # skip_routes = ["GET=^/assets/", "POST=^/api/"]
+# bypass_headers = ["X-CryKeeper-Token=0123456789abcdef0123456789abcdef", "X-CryKeeper-Token=fedcba9876543210fedcba9876543210"]
 # bypass_user_agents = ["^Somebot/"]
 # bypass_ips = ["203.0.113.0/24"]
 # allow_known_search_engines = true

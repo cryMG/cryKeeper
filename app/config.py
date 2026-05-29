@@ -19,6 +19,7 @@ DEFAULT_ALTCHA_ALGORITHM = "PBKDF2/SHA-256"
 DEFAULT_COOKIE_NAME = "crykeeper_verified"
 DEFAULT_HOST_COOKIE_NAME = "__Host-crykeeper_verified"
 DEFAULT_RATE_LIMIT_VALKEY_PREFIX = "crykeeper:rl"
+MIN_BYPASS_HEADER_TOKEN_LENGTH = 32
 INTERNAL_CHECK_PATH = "/_crykeeper_check"
 CONFIG_TABLE_NAME = "crykeeper"
 WEBSITE_TABLE_NAME = "website"
@@ -65,6 +66,7 @@ CONFIGURABLE_ENV_SUFFIXES = (
   "SKIP_ROUTES",
   "BYPASS_USER_AGENTS",
   "BYPASS_IPS",
+  "BYPASS_HEADERS",
   "ALLOW_KNOWN_SEARCH_ENGINES",
   "PATH_PREFIX",
 )
@@ -82,6 +84,7 @@ NON_WEBSITE_OVERRIDE_KEYS = frozenset(
   name.lower() for name in NON_WEBSITE_OVERRIDE_SUFFIXES
 )
 HTTP_METHOD_NAME_PATTERN = re.compile(r"^[A-Z-]+$")
+HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 
 def normalize_host_name(value: str | None) -> str:
@@ -684,6 +687,49 @@ def _read_bypass_ips(
 
 
 @dataclass(frozen=True)
+class HeaderBypassRule:
+  """One exact header/value pair that bypasses the auth_request cookie check."""
+
+  header_name: str
+  value: str
+
+
+def _parse_bypass_header_rule(value: str, name: str) -> HeaderBypassRule:
+  """Parse one header-based bypass rule in HEADER=VALUE form."""
+  header_name, separator, header_value = value.partition("=")
+  normalized_name = header_name.strip()
+  normalized_value = header_value.strip()
+
+  if not separator or not normalized_name or not normalized_value:
+    raise RuntimeError(
+      f"{name} entries must use non-empty HEADER=VALUE pairs."
+    )
+
+  if not HEADER_NAME_PATTERN.fullmatch(normalized_name):
+    raise RuntimeError(
+      f"{name} contains an invalid header name '{normalized_name}'."
+    )
+
+  if len(normalized_value) < MIN_BYPASS_HEADER_TOKEN_LENGTH:
+    raise RuntimeError(
+      f"{name} token values must be at least {MIN_BYPASS_HEADER_TOKEN_LENGTH} characters long."
+    )
+
+  return HeaderBypassRule(
+    header_name=normalized_name,
+    value=normalized_value,
+  )
+
+
+def _read_bypass_headers(
+  config_source: ConfigSource, name: str
+) -> tuple[HeaderBypassRule, ...]:
+  """Read exact header/value bypass rules from env vars or TOML arrays."""
+  values = _read_csv_values(config_source, name)
+  return tuple(_parse_bypass_header_rule(value, name) for value in values)
+
+
+@dataclass(frozen=True)
 class Settings:
   """Effective runtime settings derived from defaults, TOML, and env vars."""
 
@@ -729,6 +775,7 @@ class Settings:
   skip_routes: tuple[SkipRouteRule, ...]
   bypass_user_agents: tuple[UserAgentBypassRule, ...]
   bypass_ips: tuple[IpBypassRule, ...]
+  bypass_headers: tuple[HeaderBypassRule, ...]
   allow_known_search_engines: bool
   path_prefix: str
   blocked_return_prefixes: tuple[str, ...]
@@ -1013,6 +1060,9 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
       config_source, _env_name("BYPASS_USER_AGENTS")
     ),
     bypass_ips=_read_bypass_ips(config_source, _env_name("BYPASS_IPS")),
+    bypass_headers=_read_bypass_headers(
+      config_source, _env_name("BYPASS_HEADERS")
+    ),
     allow_known_search_engines=_read_bool(
       config_source, _env_name("ALLOW_KNOWN_SEARCH_ENGINES"), False
     ),

@@ -337,6 +337,41 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertEqual(204, ipv6_bypassed.status_code)
     self.assertEqual(401, blocked.status_code)
 
+  def test_header_bypass_accepts_multiple_tokens_for_same_header(self):
+    app = self._create_app(
+      CRYKEEPER_BYPASS_HEADERS=(
+        "X-CryKeeper-Token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,"
+        "X-CryKeeper-Token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      )
+    )
+    client = app.test_client()
+
+    bypassed = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "x-crykeeper-token": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+    wrong_value = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "X-CryKeeper-Token": "cccccccccccccccccccccccccccccccc",
+        "X-Original-URI": "/protected/resource",
+      },
+    )
+    missing = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"X-Original-URI": "/protected/resource"},
+    )
+
+    self.assertEqual(204, bypassed.status_code)
+    self.assertEqual(401, wrong_value.status_code)
+    self.assertEqual(401, missing.status_code)
+
   def test_known_search_engines_can_bypass_cookie_requirement(self):
     app = self._create_app(CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES="true")
     client = app.test_client()
