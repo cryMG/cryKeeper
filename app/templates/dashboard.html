@@ -189,7 +189,7 @@
 
     </main>
     <footer>
-      <p>Powered by <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - The open-source human verification service for Nginx making bots cry.</p>
+      <p>{{ footer_html | safe }}</p>
     </footer>
     <script src="{{ url_for('crykeeper_observability.static', filename='dashboard.js') }}" defer></script>
   </body>

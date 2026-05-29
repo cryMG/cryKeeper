@@ -203,16 +203,6 @@ main.dashboard-shell {
   background: var(--error-bg);
 }
 
-footer {
-  text-align: center;
-  font-size: 0.9em;
-  color: var(--text-muted);
-}
-
-footer p {
-  margin: 0;
-}
-
 @media (max-width: 720px) {
   main.dashboard-shell {
     width: 100%;

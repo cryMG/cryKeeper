@@ -893,6 +893,39 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertIn("powered by <strong>cryMG</strong>", body)
     self.assertNotIn("powered by &lt;strong&gt;cryMG&lt;/strong&gt;", body)
 
+  def test_challenge_page_uses_default_footer_when_none_is_configured(self):
+    app = self._create_app()
+    response = app.test_client().get(
+      "/crykeeper/challenge",
+      base_url="http://localhost",
+      query_string={"return": "/ok"},
+    )
+
+    body = response.get_data(as_text=True)
+    self.assertIn(
+      'Powered by <a href="https://github.com/cryMG/cryKeeper"',
+      body,
+    )
+    self.assertIn(
+      "The open-source human verification service making bots cry.",
+      body,
+    )
+
+  def test_challenge_page_hides_footer_when_configured_as_dash(self):
+    app = self._create_app(CRYKEEPER_FOOTER_HTML="-")
+    response = app.test_client().get(
+      "/crykeeper/challenge",
+      base_url="http://localhost",
+      query_string={"return": "/ok"},
+    )
+
+    body = response.get_data(as_text=True)
+    self.assertNotIn(
+      'Powered by <a href="https://github.com/cryMG/cryKeeper"',
+      body,
+    )
+    self.assertNotIn("<footer>", body)
+
   def test_challenge_page_localizes_footer_html_with_english_fallback(self):
     with tempfile.TemporaryDirectory() as temp_dir:
       config_path = self._write_config(

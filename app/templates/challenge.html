@@ -39,9 +39,9 @@
     {% if verification_mode == "dummy" %}
     <p class="notice">{{ translations.dummy_notice }}</p>
     {% endif %}
-    {% if footer_html %}
-    <footer class="footer">{{ footer_html | safe }}</footer>
-    {% endif %}
   </main>
+  {% if footer_html != "-" %}
+  <footer><p>{{ footer_html | safe }}</p></footer>
+  {% endif %}
 </body>
 </html>

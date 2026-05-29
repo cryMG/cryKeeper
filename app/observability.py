@@ -20,7 +20,7 @@ from prometheus_client import (
 )
 from prometheus_client.multiprocess import MultiProcessCollector
 
-from .config import INTERNAL_OBSERVABILITY_PATH
+from .config import DEFAULT_FOOTER_HTML, INTERNAL_OBSERVABILITY_PATH
 
 CRYKEEPER_PROMETHEUS_DIR_ENV = "CRYKEEPER_PROMETHEUS_MULTIPROC_DIR"
 PROMETHEUS_DIR_ENV = "PROMETHEUS_MULTIPROC_DIR"
@@ -255,7 +255,13 @@ def observability_index() -> Response:
 def dashboard() -> Response:
   """Render the internal observability dashboard."""
   snapshot = current_app.extensions["crykeeper_observability"].dashboard_snapshot()
-  response = make_response(render_template("dashboard.html", snapshot=snapshot))
+  response = make_response(
+    render_template(
+      "dashboard.html",
+      footer_html=DEFAULT_FOOTER_HTML,
+      snapshot=snapshot,
+    )
+  )
   return _with_observability_headers(response, content_type=None)
 
 

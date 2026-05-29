@@ -57,6 +57,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
 
   def test_dashboard_renders_verify_and_rate_limit_sections(self):
     app = self._create_app(
+      CRYKEEPER_FOOTER_HTML="custom footer that should not appear on the dashboard",
       CRYKEEPER_VERIFY_RATE_LIMIT_REQUESTS="1",
       CRYKEEPER_VERIFY_RATE_LIMIT_WINDOW_SECONDS="60",
       CRYKEEPER_VERIFY_RATE_LIMIT_BLOCK_SECONDS="60",
@@ -113,6 +114,14 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertIn("/_crykeeper/static/ui.css", dashboard_body)
     self.assertIn("/_crykeeper/static/dashboard.css", dashboard_body)
     self.assertIn("/_crykeeper/static/dashboard.js", dashboard_body)
+    self.assertIn(
+      'Powered by <a href="https://github.com/cryMG/cryKeeper"',
+      dashboard_body,
+    )
+    self.assertNotIn(
+      "custom footer that should not appear on the dashboard",
+      dashboard_body,
+    )
 
   def test_metrics_are_not_served_below_public_path_prefix(self):
     app = self._create_app()

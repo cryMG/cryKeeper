@@ -19,6 +19,7 @@ DEFAULT_ALTCHA_ALGORITHM = "PBKDF2/SHA-256"
 DEFAULT_COOKIE_NAME = "crykeeper_verified"
 DEFAULT_HOST_COOKIE_NAME = "__Host-crykeeper_verified"
 DEFAULT_RATE_LIMIT_VALKEY_PREFIX = "crykeeper:rl"
+DEFAULT_FOOTER_HTML = 'Powered by <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - The open-source human verification service making bots cry.'
 MIN_BYPASS_HEADER_TOKEN_LENGTH = 32
 INTERNAL_OBSERVABILITY_PATH = "/_crykeeper"
 INTERNAL_CHECK_PATH = "/_crykeeper_check"

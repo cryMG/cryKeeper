@@ -22,7 +22,7 @@ from .captcha.cap import CapVerificationResult
 from .captcha.cap import verify_token as verify_cap_token
 from .captcha.dummy import verify_request as verify_dummy_request
 from .captcha.hcaptcha import verify_request as verify_hcaptcha_request
-from .config import normalize_host_name
+from .config import DEFAULT_FOOTER_HTML, normalize_host_name
 from .cookies import issue_token_for_client, verify_token_for_client
 from .i18n import get_translations
 from .ratelimit import RateLimitRule
@@ -342,7 +342,7 @@ def _render_challenge(
       language_code=language_code,
       translations=translations,
       client_translations=client_translations,
-      footer_html=settings.footer_html.resolve(language_code),
+      footer_html=_challenge_footer_html(settings, language_code),
       return_path=return_path,
       error_message=translations.get(error_key) if error_key else None,
       auto_start=not error_key and not rate_limited,
@@ -371,6 +371,14 @@ def _render_challenge(
   if retry_after_seconds is not None:
     response.headers["Retry-After"] = str(retry_after_seconds)
   return response
+
+
+def _challenge_footer_html(settings: object, language_code: str) -> str:
+  """Return the configured footer or the shared default when none is set."""
+  configured_footer = settings.footer_html.resolve(language_code).strip()
+  if configured_footer:
+    return configured_footer
+  return DEFAULT_FOOTER_HTML
 
 
 def _set_verification_cookie(response: Response, settings: object, token: str) -> None:

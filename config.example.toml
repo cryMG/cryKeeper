@@ -111,13 +111,15 @@ max_return_path_length = 2048
 
 # Optional trusted HTML rendered at the bottom of the challenge page.
 #
+# Leave footer_html unset to use the built-in cryKeeper footer.
+# Set it to "-" to suppress the challenge footer entirely.
 # This may be either one plain string for all languages or locale-keyed nested
 # values such as footer_html.en and footer_html.de. When a localized footer is
 # configured, English is the fallback if the selected language has no footer
 # entry. The content is rendered as-is and is not sanitized, so keep it in
 # trusted deployment config only.
-footer_html.en = 'This check is powered by <strong>cryeffect Media Group</strong>'
-footer_html.de = 'Diese Prüfung wird von <strong>cryeffect Media Group</strong> bereitgestellt'
+footer_html.en = 'Powered by <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - The open-source human verification service making bots cry.'
+footer_html.de = 'Bereitgestellt von <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - Der Open-Source-Dienst zur menschlichen Verifizierung, der Bots zum Weinen bringt.'
 
 # Original request routes that should always bypass the auth check.
 #

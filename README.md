@@ -19,7 +19,9 @@ cryKeeper is a lightweight, Python-powered security container designed to protec
 - Docker-Ready: Deploy in seconds via `docker-compose`.
 - Language Agnostic: Works flawlessly whether your app is as static website or built in Node.js, PHP, Go, Python or any other language.
 
-![Challenge page example](docs/challenge-page.png)
+![Challenge page example](docs/challenge-page.webp)
+
+![Dashboard example](docs/dashboard.webp)
 
 ## ⚠️ Important Note: Good Bots vs. Bad Bots ⚠️
 
@@ -266,6 +268,8 @@ export CRYKEEPER_TRUSTED_PROXY_CIDRS=172.16.0.0/12
 ```
 
 Non-empty environment variables override only the shared defaults. They do not create or override individual `[[website]]` entries.
+
+`footer_html` is optional. If you leave it unset, the challenge page shows the built-in cryKeeper footer by default. Set it to a custom trusted HTML string or a locale-keyed table to override that default per host. Set it to `-` to hide the challenge footer entirely. The internal dashboard always shows the built-in default footer.
 
 ### Optional verification bypasses
 
