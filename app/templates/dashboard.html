@@ -3,22 +3,39 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="15">
     <title>cryKeeper Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('crykeeper_observability.static', filename='ui.css') }}">
     <link rel="stylesheet" href="{{ url_for('crykeeper_observability.static', filename='dashboard.css') }}">
   </head>
   <body>
-    <main class="dashboard-shell">
+    <main
+      class="dashboard-shell"
+      data-dashboard-root
+      data-metrics-path="{{ snapshot.metrics_path }}"
+      data-refresh-interval-ms="15000"
+    >
       <section class="hero">
         <p class="eyebrow">Internal observability</p>
         <h1>cryKeeper Dashboard</h1>
         <p>
           Prometheus-backed snapshot for challenge flow health, verification quality,
           provider latency, skip-route bypasses, and rate-limit behavior.
-          Data since last startup, refreshes every 15 seconds.
+          Data since last startup, updates every 15 seconds.
         </p>
         <div class="hero-actions">
+          <span data-refresh-shell data-state="ok">
+            <button
+              type="button"
+              data-manual-refresh
+              aria-label="Refresh dashboard"
+              title="Refresh dashboard"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5a7 7 0 0 1 6.32 4H16v2h6V5h-2v2.18A9 9 0 1 0 21 12h-2a7 7 0 1 1-7-7Z" fill="currentColor"/>
+              </svg>
+            </button>
+            <span data-refresh-status-text>Initial snapshot</span>
+          </span>
           <span>Private endpoint prefix: {{ snapshot.dashboard_path.rsplit('/', 1)[0] }}</span>
           <a href="{{ snapshot.metrics_path }}">Open Prometheus metrics</a>
         </div>
@@ -26,10 +43,10 @@
 
       <section class="cards">
         {% for card in snapshot.cards %}
-          <article class="card">
+          <article class="card" data-card-key="{{ card.key }}">
             <h2>{{ card.title }}</h2>
-            <p class="metric">{{ card.value }}</p>
-            <p class="detail">{{ card.detail }}</p>
+            <p class="metric" data-card-value>{{ card.value }}</p>
+            <p class="detail" data-card-detail>{{ card.detail }}</p>
           </article>
         {% endfor %}
       </section>
@@ -42,34 +59,36 @@
               <p>Success ratio and dominant failure reasons by host and provider.</p>
             </div>
           </div>
-          {% if snapshot.verify_rows %}
-            <table>
-              <thead>
-                <tr>
-                  <th>Host</th>
-                  <th>Provider</th>
-                  <th>Success rate</th>
-                  <th>Successful</th>
-                  <th>Total</th>
-                  <th>Failures</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in snapshot.verify_rows %}
+          <div data-section="verify-rows">
+            {% if snapshot.verify_rows %}
+              <table>
+                <thead>
                   <tr>
-                    <td>{{ row.host }}</td>
-                    <td><span class="badge">{{ row.provider }}</span></td>
-                    <td>{{ row.success_rate }}</td>
-                    <td>{{ row.successful }}</td>
-                    <td>{{ row.total }}</td>
-                    <td>{{ row.failures }}</td>
+                    <th>Host</th>
+                    <th>Provider</th>
+                    <th>Success rate</th>
+                    <th>Successful</th>
+                    <th>Total</th>
+                    <th>Failures</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% else %}
-            <p class="empty">No verification attempts recorded yet.</p>
-          {% endif %}
+                </thead>
+                <tbody>
+                  {% for row in snapshot.verify_rows %}
+                    <tr>
+                      <td>{{ row.host }}</td>
+                      <td><span class="badge">{{ row.provider }}</span></td>
+                      <td>{{ row.success_rate }}</td>
+                      <td>{{ row.successful }}</td>
+                      <td>{{ row.total }}</td>
+                      <td>{{ row.failures }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="empty">No verification attempts recorded yet.</p>
+            {% endif %}
+          </div>
         </article>
 
         <article class="panel">
@@ -79,34 +98,36 @@
               <p>p95 and average latency since startup, grouped by host, provider, and operation.</p>
             </div>
           </div>
-          {% if snapshot.latency_rows %}
-            <table>
-              <thead>
-                <tr>
-                  <th>Host</th>
-                  <th>Provider</th>
-                  <th>Operation</th>
-                  <th>Requests</th>
-                  <th>p95</th>
-                  <th>Average</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in snapshot.latency_rows %}
+          <div data-section="latency-rows">
+            {% if snapshot.latency_rows %}
+              <table>
+                <thead>
                   <tr>
-                    <td>{{ row.host }}</td>
-                    <td><span class="badge">{{ row.provider }}</span></td>
-                    <td>{{ row.operation }}</td>
-                    <td>{{ row.count }}</td>
-                    <td>{{ row.p95 }}</td>
-                    <td>{{ row.average }}</td>
+                    <th>Host</th>
+                    <th>Provider</th>
+                    <th>Operation</th>
+                    <th>Requests</th>
+                    <th>p95</th>
+                    <th>Average</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% else %}
-            <p class="empty">No provider latency samples recorded yet.</p>
-          {% endif %}
+                </thead>
+                <tbody>
+                  {% for row in snapshot.latency_rows %}
+                    <tr>
+                      <td>{{ row.host }}</td>
+                      <td><span class="badge">{{ row.provider }}</span></td>
+                      <td>{{ row.operation }}</td>
+                      <td>{{ row.count }}</td>
+                      <td>{{ row.p95 }}</td>
+                      <td>{{ row.average }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="empty">No provider latency samples recorded yet.</p>
+            {% endif %}
+          </div>
         </article>
 
         <article class="panel">
@@ -116,49 +137,53 @@
               <p>Challenge and verify blocks plus backend fallback counts.</p>
             </div>
           </div>
-          {% if snapshot.rate_limit_rows %}
-            <table>
-              <thead>
-                <tr>
-                  <th>Host</th>
-                  <th>Scope</th>
-                  <th>Backend</th>
-                  <th>Hits</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in snapshot.rate_limit_rows %}
+          <div data-section="rate-limit-rows">
+            {% if snapshot.rate_limit_rows %}
+              <table>
+                <thead>
                   <tr>
-                    <td>{{ row.host }}</td>
-                    <td>{{ row.scope }}</td>
-                    <td>{{ row.backend }}</td>
-                    <td>{{ row.hits }}</td>
+                    <th>Host</th>
+                    <th>Scope</th>
+                    <th>Backend</th>
+                    <th>Hits</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% else %}
-            <p class="empty">No rate-limit hits recorded yet.</p>
-          {% endif %}
+                </thead>
+                <tbody>
+                  {% for row in snapshot.rate_limit_rows %}
+                    <tr>
+                      <td>{{ row.host }}</td>
+                      <td>{{ row.scope }}</td>
+                      <td>{{ row.backend }}</td>
+                      <td>{{ row.hits }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="empty">No rate-limit hits recorded yet.</p>
+            {% endif %}
+          </div>
 
-          {% if snapshot.backend_failure_rows %}
-            <table>
-              <thead>
-                <tr>
-                  <th>Fallback source</th>
-                  <th>Count</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in snapshot.backend_failure_rows %}
+          <div data-section="backend-failure-rows">
+            {% if snapshot.backend_failure_rows %}
+              <table>
+                <thead>
                   <tr>
-                    <td><span class="badge danger">{{ row.backend }}</span></td>
-                    <td>{{ row.count }}</td>
+                    <th>Fallback source</th>
+                    <th>Count</th>
                   </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% endif %}
+                </thead>
+                <tbody>
+                  {% for row in snapshot.backend_failure_rows %}
+                    <tr>
+                      <td><span class="badge danger">{{ row.backend }}</span></td>
+                      <td>{{ row.count }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
         </article>
       </section>
 
@@ -166,5 +191,6 @@
     <footer>
       <p>Powered by <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - The open-source human verification service for Nginx making bots cry.</p>
     </footer>
+    <script src="{{ url_for('crykeeper_observability.static', filename='dashboard.js') }}" defer></script>
   </body>
 </html>

@@ -98,12 +98,21 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertIn(
       "Requests bypassed by configured skip_routes since startup.", dashboard_body
     )
+    self.assertNotIn('http-equiv="refresh"', dashboard_body)
     self.assertIn("Verify outcomes", dashboard_body)
     self.assertIn("Rate limits", dashboard_body)
     self.assertIn("localhost", dashboard_body)
     self.assertIn("dummy", dashboard_body)
+    self.assertIn("data-dashboard-root", dashboard_body)
+    self.assertIn("data-manual-refresh", dashboard_body)
+    self.assertIn("data-refresh-shell", dashboard_body)
+    self.assertIn("data-refresh-status-text", dashboard_body)
+    self.assertIn('aria-label="Refresh dashboard"', dashboard_body)
+    self.assertIn('viewBox="0 0 24 24"', dashboard_body)
+    self.assertIn("/_crykeeper/metrics", dashboard_body)
     self.assertIn("/_crykeeper/static/ui.css", dashboard_body)
     self.assertIn("/_crykeeper/static/dashboard.css", dashboard_body)
+    self.assertIn("/_crykeeper/static/dashboard.js", dashboard_body)
 
   def test_metrics_are_not_served_below_public_path_prefix(self):
     app = self._create_app()
@@ -127,11 +136,36 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       "/_crykeeper/static/dashboard.css",
       base_url="http://localhost",
     )
+    dashboard_script_response = client.get(
+      "/_crykeeper/static/dashboard.js",
+      base_url="http://localhost",
+    )
     try:
       self.assertEqual(200, shared_style_response.status_code)
       self.assertEqual(200, dashboard_style_response.status_code)
+      self.assertEqual(200, dashboard_script_response.status_code)
       self.assertIn("--page-bg", shared_style_response.get_data(as_text=True))
+      self.assertIn(
+        "data-refresh-status-text",
+        dashboard_body := app.test_client()
+        .get(
+          "/_crykeeper/dashboard",
+          base_url="http://localhost",
+        )
+        .get_data(as_text=True),
+      )
       self.assertIn("dashboard-shell", dashboard_style_response.get_data(as_text=True))
+      self.assertIn(
+        "data-refresh-shell", dashboard_style_response.get_data(as_text=True)
+      )
+      self.assertIn(
+        "startDashboardRefresh", dashboard_script_response.get_data(as_text=True)
+      )
+      self.assertIn("data-manual-refresh", dashboard_body)
+      self.assertIn(
+        "setRefreshButtonState", dashboard_script_response.get_data(as_text=True)
+      )
     finally:
       shared_style_response.close()
       dashboard_style_response.close()
+      dashboard_script_response.close()

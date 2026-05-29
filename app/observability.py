@@ -192,6 +192,7 @@ class CryKeeperObservability:
 
     cards = (
       {
+        "key": "check_requests",
         "title": "Check requests",
         "value": _format_integer(
           _sum_samples(samples, "crykeeper_check_requests_total")
@@ -199,21 +200,25 @@ class CryKeeperObservability:
         "detail": "Bypasses, valid cookies, and challenge redirects since startup.",
       },
       {
+        "key": "verify_success_rate",
         "title": "Verify success rate",
         "value": _format_rate(verify_success, verify_total),
         "detail": f"{_format_integer(verify_success)} successful verifies out of {_format_integer(verify_total)}.",
       },
       {
+        "key": "skip_routes",
         "title": "Skip routes",
         "value": _format_integer(skip_route_bypasses),
         "detail": "Requests bypassed by configured skip_routes since startup.",
       },
       {
+        "key": "rate_limit_hits",
         "title": "Rate limit hits",
         "value": _format_integer(rate_limit_hits),
         "detail": "Blocked challenge or verify requests since startup.",
       },
       {
+        "key": "backend_fallbacks",
         "title": "Backend fallbacks",
         "value": _format_integer(backend_failures),
         "detail": "Valkey backend failures that fell back to in-memory checks.",
