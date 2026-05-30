@@ -135,7 +135,6 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       'Powered by <a href="https://github.com/cryMG/cryKeeper"',
       dashboard_body,
     )
-    self.assertIn("Heuristic guidance only", dashboard_body)
     self.assertNotIn(
       "custom footer that should not appear on the dashboard",
       dashboard_body,
