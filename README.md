@@ -36,6 +36,7 @@ By default, **cryKeeper** focuses strictly on verifying human behavior. This mea
 - Reuse signed stateless verification cookies so visitors do not need to solve a challenge on every request.
 - Choose between Cap, ALTCHA, hCaptcha, or Dummy mode depending on your deployment and testing needs.
 - Configure shared defaults and per-host website overrides with different domains, prefixes, and challenge settings.
+- Roll out new cryKeeper rules with explicit enforcement modes, from pure logging, challenge passthrough to enforce.
 - Exclude selected routes from checks with skip rules when parts of the site should stay reachable without verification.
 - Bypass the human check for selected client IPs, User-Agent regexes, or a built-in set of common search-engine crawlers.
 - Apply challenge and verify rate limits, with optional shared state through Valkey for multi-worker or multi-instance deployments.
@@ -194,9 +195,9 @@ The example above internally proxies the challenge page so the browser keeps the
 
 Every configured `path_prefix` exposes the same set of cryKeeper endpoints. With the default configuration, the paths are available below `/crykeeper`.
 
-- `GET <path_prefix>/check`: internal auth endpoint for nginx `auth_request`. Returns `204 No Content` when a configured bypass matches or when the signed verification cookie is valid, or `401 Unauthorized` plus the `X-Auth-Redirect` header when nginx should hand the browser over to the challenge flow, for example by internally proxying the challenge page with a `403 Forbidden` response.
+- `GET <path_prefix>/check`: internal auth endpoint for nginx `auth_request`. Returns `204 No Content` when a configured bypass matches or when the signed verification cookie is valid, or `401 Unauthorized` plus the `X-Auth-Redirect` header when nginx should hand the browser over to the challenge flow, for example by internally proxying the challenge page with a `403 Forbidden` response. In `log_only`, cryKeeper logs those would-challenge decisions but returns `204 No Content` instead. In `challenge_passthrough`, it also accepts a signed passthrough cookie created after a failed verification while that mode remains active.
 - `GET <path_prefix>/challenge`: browser-facing challenge page. Renders the configured verification flow, respects the safe local `return` query parameter, enforces the secure-transport rules, and applies the challenge rate limit.
-- `POST <path_prefix>/verify`: completes the active provider verification, sets the signed verification cookie, and redirects the browser to the validated local `return` path. This endpoint is protected by the verify rate limit.
+- `POST <path_prefix>/verify`: completes the active provider verification, sets the signed verification cookie, and redirects the browser to the validated local `return` path. This endpoint is protected by the verify rate limit. In `challenge_passthrough`, failed verifies redirect back with a signed passthrough cookie instead of blocking access.
 - `GET <path_prefix>/altcha/challenge`: provider-specific ALTCHA challenge endpoint. Returns a fresh signed ALTCHA challenge as JSON and applies the same secure-transport and challenge rate-limit checks as the HTML challenge page.
 - `GET <path_prefix>/clear`: removes the verification cookie and redirects to the validated local `return` path, falling back to `/` if the parameter is missing or invalid.
 - `GET <path_prefix>/healthz`: minimal liveness endpoint for container and reverse-proxy health checks. Returns `200 OK` with the body `ok`.
@@ -239,6 +240,7 @@ Minimal example:
 [crykeeper]
 secret_key = "change-me-in-production"
 verification_mode = "dummy"
+enforcement_mode = "enforce"
 path_prefix = "/crykeeper"
 human_cookie_secure = true
 trusted_proxy_hops = 1
@@ -270,6 +272,29 @@ export CRYKEEPER_TRUSTED_PROXY_CIDRS=172.16.0.0/12
 Non-empty environment variables override only the shared defaults. They do not create or override individual `[[website]]` entries.
 
 `footer_html` is optional. If you leave it unset, the challenge page shows the built-in cryKeeper footer by default. Set it to a custom trusted HTML string or a locale-keyed table to override that default per host. Set it to `-` to hide the challenge footer entirely. The internal dashboard always shows the built-in default footer.
+
+### Enforcement Modes
+
+Use `enforcement_mode` when you want to choose between normal enforcement and safer rollout behavior.
+
+- `enforce`: default production behavior.
+- `log_only`: validate new prefixes, bypasses, or proxy rules against live traffic without showing the challenge or blocking users.
+- `challenge_passthrough`: still show the real challenge flow, but let failed verifies continue with a signed passthrough cookie instead of locking users out.
+
+```toml
+[crykeeper]
+enforcement_mode = "log_only"
+```
+
+```bash
+export CRYKEEPER_ENFORCEMENT_MODE=log_only
+```
+
+With `enforcement_mode = "log_only"`, cryKeeper still evaluates bypass rules, cookies, and return-path handling during `GET <path_prefix>/check`, and logs every request that would have been challenged. The difference is only in enforcement: cryKeeper returns `204 No Content` instead of `401 Unauthorized`, so nginx continues to the protected upstream.
+
+With `enforcement_mode = "challenge_passthrough"`, cryKeeper still shows the normal challenge. If `POST <path_prefix>/verify` fails, cryKeeper records the failed verification outcome but redirects back with a signed passthrough cookie instead of blocking access. That passthrough cookie is not a real human-verification cookie and is ignored again as soon as you switch back to `enforce` or `log_only`.
+
+This is intended for safe live rollouts of new prefixes, bypasses, proxy handling, and challenge UX changes. Only a real successful verification creates the normal human-verification cookie.
 
 ### Optional verification bypasses
 
@@ -324,6 +349,7 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 
 - Set a long random value for `secret_key` or `CRYKEEPER_SECRET_KEY`; cryKeeper refuses to start with the published placeholder default
 - Serve cryKeeper behind HTTPS and set `human_cookie_secure = true` in production
+- Keep `enforcement_mode = "enforce"` outside planned validation windows, because both rollout modes intentionally allow access that would otherwise be challenged
 - Keep the reverse proxy prefix aligned with `path_prefix`
 - Set `trusted_proxy_hops` and `trusted_proxy_cidrs` to match your real proxy chain whenever a reverse proxy supplies forwarded headers
 - Decide explicitly whether trusted crawlers, monitoring systems, or upstreams should bypass the human check via `bypass_ips`, `bypass_headers`, `bypass_user_agents`, or `allow_known_search_engines`

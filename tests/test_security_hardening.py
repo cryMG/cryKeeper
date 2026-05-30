@@ -67,6 +67,19 @@ class CryKeeperHardeningTests(unittest.TestCase):
       with self.assertRaisesRegex(RuntimeError, "TRUSTED_PROXY_CIDRS"):
         create_app()
 
+  def test_create_app_rejects_unknown_enforcement_mode(self):
+    with patch.dict(
+      os.environ,
+      {
+        "CRYKEEPER_SECRET_KEY": "test-secret",
+        "CRYKEEPER_VERIFICATION_MODE": "dummy",
+        "CRYKEEPER_ENFORCEMENT_MODE": "maybe",
+      },
+      clear=True,
+    ):
+      with self.assertRaisesRegex(RuntimeError, "ENFORCEMENT_MODE"):
+        create_app()
+
   def test_cap_mode_allows_explicit_local_http_override(self):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="cap",
@@ -399,6 +412,40 @@ class CryKeeperHardeningTests(unittest.TestCase):
     )
 
     self.assertEqual(401, response.status_code)
+
+  def test_log_only_mode_logs_challenge_decision_but_allows_request(self):
+    app = self._create_app(CRYKEEPER_ENFORCEMENT_MODE="log_only")
+
+    with self.assertLogs(app.logger.name, level="INFO") as captured_logs:
+      response = app.test_client().get(
+        "/crykeeper/check",
+        base_url="http://localhost",
+        headers={"X-Original-URI": "/protected/resource"},
+      )
+
+    self.assertEqual(204, response.status_code)
+    self.assertNotIn("X-Auth-Redirect", response.headers)
+    self.assertTrue(
+      any(
+        "Log-only mode would redirect to challenge" in log_entry
+        for log_entry in captured_logs.output
+      )
+    )
+
+  def test_challenge_passthrough_mode_still_redirects_to_challenge(self):
+    app = self._create_app(CRYKEEPER_ENFORCEMENT_MODE="challenge_passthrough")
+
+    response = app.test_client().get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"X-Original-URI": "/protected/resource"},
+    )
+
+    self.assertEqual(401, response.status_code)
+    self.assertIn(
+      "/crykeeper/challenge?return=%2Fprotected%2Fresource",
+      response.headers["X-Auth-Redirect"],
+    )
 
   def test_challenge_rate_limit_returns_retry_after(self):
     app = self._create_app(
@@ -809,6 +856,51 @@ class CryKeeperHardeningTests(unittest.TestCase):
 
     self.assertEqual(403, response.status_code)
     self.assertNotIn("Set-Cookie", response.headers)
+    verify_hcaptcha_request.assert_called_once()
+
+  @patch("app.routes.verify_hcaptcha_request")
+  def test_challenge_passthrough_redirects_after_failed_verification(
+    self, verify_hcaptcha_request
+  ):
+    verify_hcaptcha_request.return_value = VerificationResult(
+      success=False,
+      retryable=False,
+      error_key="error_failed",
+      status_code=403,
+      payload={"success": False},
+    )
+
+    app = self._create_app(
+      CRYKEEPER_ENFORCEMENT_MODE="challenge_passthrough",
+      CRYKEEPER_VERIFICATION_MODE="hcaptcha",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+      CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+    )
+    client = app.test_client()
+
+    first_check = client.get(
+      "/crykeeper/check",
+      base_url="https://example.com",
+      headers={"X-Original-URI": "/ok", "User-Agent": "UA"},
+    )
+    verify_response = client.post(
+      "/crykeeper/verify",
+      base_url="https://example.com",
+      data={"return": "/ok", "h-captcha-response": "bad-token"},
+      headers={"User-Agent": "UA"},
+    )
+    second_check = client.get(
+      "/crykeeper/check",
+      base_url="https://example.com",
+      headers={"X-Original-URI": "/ok", "User-Agent": "UA"},
+    )
+
+    self.assertEqual(401, first_check.status_code)
+    self.assertEqual(302, verify_response.status_code)
+    self.assertEqual("/ok", verify_response.headers["Location"])
+    self.assertIn("Set-Cookie", verify_response.headers)
+    self.assertEqual(204, second_check.status_code)
     verify_hcaptcha_request.assert_called_once()
 
   @patch("app.routes.create_altcha_challenge")

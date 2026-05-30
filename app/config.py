@@ -18,6 +18,16 @@ DEFAULT_ALTCHA_SCRIPT_PATH = "/static/vendor/altcha.min.js"
 DEFAULT_ALTCHA_ALGORITHM = "PBKDF2/SHA-256"
 DEFAULT_COOKIE_NAME = "crykeeper_verified"
 DEFAULT_HOST_COOKIE_NAME = "__Host-crykeeper_verified"
+ENFORCEMENT_MODE_ENFORCE = "enforce"
+ENFORCEMENT_MODE_LOG_ONLY = "log_only"
+ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH = "challenge_passthrough"
+ENFORCEMENT_MODES = frozenset(
+  {
+    ENFORCEMENT_MODE_ENFORCE,
+    ENFORCEMENT_MODE_LOG_ONLY,
+    ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH,
+  }
+)
 DEFAULT_RATE_LIMIT_VALKEY_PREFIX = "crykeeper:rl"
 DEFAULT_FOOTER_HTML = 'Powered by <a href="https://github.com/cryMG/cryKeeper" target="_blank" rel="noopener noreferrer">cryKeeper</a> - The open-source human verification service making bots cry.'
 MIN_BYPASS_HEADER_TOKEN_LENGTH = 32
@@ -30,6 +40,7 @@ CONFIGURABLE_ENV_SUFFIXES = (
   "HUMAN_COOKIE_NAME",
   "HUMAN_COOKIE_TTL_SECONDS",
   "HUMAN_COOKIE_SECURE",
+  "ENFORCEMENT_MODE",
   "ALLOW_INSECURE_LOCAL_CAP",
   "HUMAN_COOKIE_BINDING",
   "TRUSTED_PROXY_HOPS",
@@ -740,6 +751,7 @@ class Settings:
   cookie_name: str
   cookie_ttl_seconds: int
   cookie_secure: bool
+  enforcement_mode: str
   allow_insecure_local_cap: bool
   cookie_binding_mode: str
   trusted_proxy_hops: int
@@ -948,6 +960,13 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
       24 * 60 * 60,
     ),
     cookie_secure=cookie_secure,
+    enforcement_mode=_read_text(
+      config_source,
+      _env_name("ENFORCEMENT_MODE"),
+      ENFORCEMENT_MODE_ENFORCE,
+    )
+    .strip()
+    .lower(),
     allow_insecure_local_cap=_read_bool(
       config_source,
       _env_name("ALLOW_INSECURE_LOCAL_CAP"),

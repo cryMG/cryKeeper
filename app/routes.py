@@ -22,8 +22,18 @@ from .captcha.cap import CapVerificationResult
 from .captcha.cap import verify_token as verify_cap_token
 from .captcha.dummy import verify_request as verify_dummy_request
 from .captcha.hcaptcha import verify_request as verify_hcaptcha_request
-from .config import DEFAULT_FOOTER_HTML, normalize_host_name
-from .cookies import issue_token_for_client, verify_token_for_client
+from .config import (
+  DEFAULT_FOOTER_HTML,
+  ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH,
+  ENFORCEMENT_MODE_LOG_ONLY,
+  normalize_host_name,
+)
+from .cookies import (
+  TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH,
+  TOKEN_SUBJECT_HUMAN,
+  issue_token_for_client,
+  verify_token_for_client,
+)
 from .i18n import get_translations
 from .ratelimit import RateLimitRule
 from .security import normalize_return_path
@@ -85,6 +95,7 @@ def check() -> tuple[str, int] | Response:
     settings.secret_key,
     token,
     client_binding=_client_binding_value(settings.cookie_binding_mode),
+    allowed_subjects=_check_allowed_token_subjects(settings),
   )
   return_path = normalize_return_path(
     original_uri,
@@ -93,7 +104,33 @@ def check() -> tuple[str, int] | Response:
   )
 
   if payload is not None:
+    if payload["sub"] == TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH:
+      _observability().record_check(request_host, "challenge_passthrough_allowed")
+      current_app.logger.info(
+        "Challenge passthrough cookie allowed request",
+        extra={
+          "return_path": return_path,
+          "request_method": _original_request_method(),
+          "request_path": _original_request_path(),
+          "client_ip": _client_ip_value(),
+        },
+      )
+      return "", HTTPStatus.NO_CONTENT
+
     _observability().record_check(request_host, "allowed")
+    return "", HTTPStatus.NO_CONTENT
+
+  if settings.enforcement_mode == ENFORCEMENT_MODE_LOG_ONLY:
+    _observability().record_check(request_host, "log_only_challenge_required")
+    current_app.logger.info(
+      "Log-only mode would redirect to challenge",
+      extra={
+        "return_path": return_path,
+        "request_method": _original_request_method(),
+        "request_path": _original_request_path(),
+        "client_ip": _client_ip_value(),
+      },
+    )
     return "", HTTPStatus.NO_CONTENT
 
   # nginx reads this header and converts the 401 into a redirect to /crykeeper/challenge.
@@ -231,20 +268,27 @@ def verify() -> Response:
       verification_outcome,
       time.perf_counter() - verify_started_at,
     )
+    if settings.enforcement_mode == ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH:
+      current_app.logger.info(
+        "Challenge passthrough granted after failed verification",
+        extra={
+          "return_path": return_path,
+          "reason": _verification_metric_reason(verification_result),
+        },
+      )
+      return _redirect_with_access_cookie(
+        return_path,
+        settings,
+        TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH,
+      )
+
     return _render_challenge(
       return_path,
       error_key=error_key,
       status_code=status_code,
     )
 
-  token = issue_token_for_client(
-    settings.secret_key,
-    settings.cookie_ttl_seconds,
-    client_binding=_client_binding_value(settings.cookie_binding_mode),
-  )
-  response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
-  _set_verification_cookie(response, settings, token)
-  response.headers["Cache-Control"] = "no-store"
+  response = _redirect_with_access_cookie(return_path, settings, TOKEN_SUBJECT_HUMAN)
   _observability().record_verify_result(
     request_host,
     settings.verification_mode,
@@ -419,6 +463,31 @@ def _clear_verification_cookie(response: Response, settings: object) -> None:
     samesite="Lax",
     path="/",
   )
+
+
+def _redirect_with_access_cookie(
+  return_path: str,
+  settings: object,
+  subject: str,
+) -> Response:
+  """Redirect back to the validated target after issuing one signed access cookie."""
+  token = issue_token_for_client(
+    settings.secret_key,
+    settings.cookie_ttl_seconds,
+    client_binding=_client_binding_value(settings.cookie_binding_mode),
+    subject=subject,
+  )
+  response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
+  _set_verification_cookie(response, settings, token)
+  response.headers["Cache-Control"] = "no-store"
+  return response
+
+
+def _check_allowed_token_subjects(settings: object) -> tuple[str, ...]:
+  """Return which signed cookie subjects should count as pass-through in /check."""
+  if settings.enforcement_mode == ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH:
+    return (TOKEN_SUBJECT_HUMAN, TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH)
+  return (TOKEN_SUBJECT_HUMAN,)
 
 
 def _rate_limit_response(scope: str, return_path: str) -> Response | None:

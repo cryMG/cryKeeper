@@ -5,6 +5,9 @@ import json
 import time
 from typing import Any
 
+TOKEN_SUBJECT_HUMAN = "human"
+TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH = "challenge-passthrough"
+
 
 def _b64url_encode(value: bytes) -> str:
   """Encode bytes in URL-safe base64 without '=' padding for compact cookies."""
@@ -17,21 +20,26 @@ def _b64url_decode(value: str) -> bytes:
   return base64.urlsafe_b64decode(value + padding)
 
 
-def issue_token(secret_key: str, ttl_seconds: int) -> str:
+def issue_token(
+  secret_key: str,
+  ttl_seconds: int,
+  subject: str = TOKEN_SUBJECT_HUMAN,
+) -> str:
   """Issue a stateless signed cookie payload with an explicit expiry timestamp."""
-  return issue_token_for_client(secret_key, ttl_seconds)
+  return issue_token_for_client(secret_key, ttl_seconds, subject=subject)
 
 
 def issue_token_for_client(
   secret_key: str,
   ttl_seconds: int,
   client_binding: str | None = None,
+  subject: str = TOKEN_SUBJECT_HUMAN,
 ) -> str:
   """Issue a stateless signed cookie optionally bound to stable client properties."""
   issued_at = int(time.time())
   payload = {
     "v": 2 if client_binding is not None else 1,
-    "sub": "human",
+    "sub": subject,
     "iat": issued_at,
     "exp": issued_at + ttl_seconds,
   }
@@ -47,15 +55,24 @@ def issue_token_for_client(
   return f"{payload_b64}.{signature_b64}"
 
 
-def verify_token(secret_key: str, token: str | None) -> dict[str, Any] | None:
+def verify_token(
+  secret_key: str,
+  token: str | None,
+  allowed_subjects: tuple[str, ...] = (TOKEN_SUBJECT_HUMAN,),
+) -> dict[str, Any] | None:
   """Validate signature, shape, and expiry of the human-verification cookie."""
-  return verify_token_for_client(secret_key, token)
+  return verify_token_for_client(
+    secret_key,
+    token,
+    allowed_subjects=allowed_subjects,
+  )
 
 
 def verify_token_for_client(
   secret_key: str,
   token: str | None,
   client_binding: str | None = None,
+  allowed_subjects: tuple[str, ...] = (TOKEN_SUBJECT_HUMAN,),
 ) -> dict[str, Any] | None:
   """Validate signature, expiry, and optional client binding for the cookie."""
   if not token:
@@ -79,7 +96,11 @@ def verify_token_for_client(
   if payload.get("v") not in {1, 2}:
     return None
 
-  if payload.get("sub") != "human":
+  subject = payload.get("sub")
+  if not isinstance(subject, str):
+    return None
+
+  if subject not in allowed_subjects:
     return None
 
   expected_binding_digest = None

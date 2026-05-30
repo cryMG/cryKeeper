@@ -24,6 +24,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 human_cookie_name = "__Host-file-cookie"
                 human_cookie_ttl_seconds = 123
                 human_cookie_secure = true
+                enforcement_mode = "challenge_passthrough"
                 allow_insecure_local_cap = true
                 human_cookie_binding = "none"
                 trusted_proxy_hops = 2
@@ -75,6 +76,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("__Host-file-cookie", settings.cookie_name)
     self.assertEqual(123, settings.cookie_ttl_seconds)
     self.assertTrue(settings.cookie_secure)
+    self.assertEqual("challenge_passthrough", settings.enforcement_mode)
     self.assertTrue(settings.allow_insecure_local_cap)
     self.assertEqual("none", settings.cookie_binding_mode)
     self.assertEqual(2, settings.trusted_proxy_hops)
@@ -165,6 +167,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 secret_key = "file-secret"
                 human_cookie_ttl_seconds = 321
                 human_cookie_secure = true
+                enforcement_mode = "challenge_passthrough"
                 footer_html = "from file"
                 skip_routes = ["^/file-only/"]
                 bypass_user_agents = ["^FileBot$"]
@@ -183,6 +186,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_CONFIG_FILE": config_path,
           "CRYKEEPER_SECRET_KEY": "env-secret",
           "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
+          "CRYKEEPER_ENFORCEMENT_MODE": "enforce",
           "CRYKEEPER_FOOTER_HTML": "from <strong>env</strong>",
           "CRYKEEPER_SKIP_ROUTES": "GET=^/assets/,POST=^/api/",
           "CRYKEEPER_BYPASS_USER_AGENTS": "^EnvBot$,^EnvCrawler/.*$",
@@ -200,6 +204,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("env-secret", settings.secret_key)
     self.assertEqual(321, settings.cookie_ttl_seconds)
     self.assertFalse(settings.cookie_secure)
+    self.assertEqual("enforce", settings.enforcement_mode)
     self.assertEqual("from <strong>env</strong>", settings.footer_html.resolve("de"))
     self.assertEqual(
       (("GET", "^/assets/"), ("POST", "^/api/")),
@@ -233,6 +238,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 [crykeeper]
                 secret_key = "file-secret"
                 human_cookie_secure = true
+                enforcement_mode = "log_only"
                 footer_html = "from file"
                 skip_routes = ["^/from-file/"]
                 bypass_user_agents = ["^FileBot$"]
@@ -255,6 +261,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_BYPASS_USER_AGENTS": "",
           "CRYKEEPER_BYPASS_IPS": "  ",
           "CRYKEEPER_BYPASS_HEADERS": "   ",
+          "CRYKEEPER_ENFORCEMENT_MODE": "",
           "CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES": "",
           "CRYKEEPER_RATE_LIMIT_BACKEND": "",
           "CRYKEEPER_PATH_PREFIX": "",
@@ -270,6 +277,7 @@ class ConfigLoadingTests(unittest.TestCase):
       ((None, "^/from-file/"),),
       tuple((rule.method, rule.pattern) for rule in settings.skip_routes),
     )
+    self.assertEqual("log_only", settings.enforcement_mode)
     self.assertEqual(
       ("^FileBot$",), tuple(rule.pattern for rule in settings.bypass_user_agents)
     )

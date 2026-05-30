@@ -3,7 +3,13 @@ import logging
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .config import INTERNAL_OBSERVABILITY_PATH, load_settings_bundle
+from .config import (
+  ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH,
+  ENFORCEMENT_MODE_LOG_ONLY,
+  ENFORCEMENT_MODES,
+  INTERNAL_OBSERVABILITY_PATH,
+  load_settings_bundle,
+)
 from .i18n import validate_catalogs
 from .observability import CryKeeperObservability, observability
 from .proxy import TrustedProxyHeadersMiddleware
@@ -58,6 +64,16 @@ def create_app() -> Flask:
       "CRYKEEPER_HUMAN_COOKIE_BINDING=none allows copied cookies to be replayed from other clients."
     )
 
+  if settings.enforcement_mode == ENFORCEMENT_MODE_LOG_ONLY:
+    app.logger.warning(
+      "CRYKEEPER_ENFORCEMENT_MODE=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout."
+    )
+
+  if settings.enforcement_mode == ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH:
+    app.logger.warning(
+      "CRYKEEPER_ENFORCEMENT_MODE=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout."
+    )
+
   if (
     settings.cookie_binding_mode == "ip-user-agent" and settings.trusted_proxy_hops == 0
   ):
@@ -106,6 +122,11 @@ def _validate_effective_settings(
   if settings.verification_mode not in {"dummy", "cap", "hcaptcha", "altcha"}:
     raise RuntimeError(
       f"{prefix}CRYKEEPER_VERIFICATION_MODE must be one of 'dummy', 'cap', 'hcaptcha', or 'altcha'."
+    )
+
+  if settings.enforcement_mode not in ENFORCEMENT_MODES:
+    raise RuntimeError(
+      f"{prefix}CRYKEEPER_ENFORCEMENT_MODE must be one of 'enforce', 'log_only', or 'challenge_passthrough'."
     )
 
   if settings.cookie_binding_mode not in {"none", "user-agent", "ip-user-agent"}:
@@ -188,6 +209,24 @@ def _log_website_specific_warnings(
   ):
     app.logger.warning(
       "%sCRYKEEPER_HUMAN_COOKIE_BINDING=none allows copied cookies to be replayed from other clients.",
+      prefix,
+    )
+
+  if (
+    settings.enforcement_mode == ENFORCEMENT_MODE_LOG_ONLY
+    and settings.enforcement_mode != default_settings.enforcement_mode
+  ):
+    app.logger.warning(
+      "%sCRYKEEPER_ENFORCEMENT_MODE=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout.",
+      prefix,
+    )
+
+  if (
+    settings.enforcement_mode == ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH
+    and settings.enforcement_mode != default_settings.enforcement_mode
+  ):
+    app.logger.warning(
+      "%sCRYKEEPER_ENFORCEMENT_MODE=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout.",
       prefix,
     )
 

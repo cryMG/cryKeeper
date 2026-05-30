@@ -45,6 +45,20 @@ human_cookie_ttl_seconds = 86400
 # local plain-HTTP development without the demo nginx TLS terminator.
 human_cookie_secure = true
 
+# How cryKeeper should enforce the challenge flow.
+#
+# enforce:
+#   Default. Missing or invalid cookies trigger the normal challenge flow.
+# log_only:
+#   cryKeeper still evaluates GET /check normally and logs would-challenge
+#   decisions, but returns 204 so nginx continues to the protected upstream.
+# challenge_passthrough:
+#   cryKeeper still shows the challenge, but failed POST /verify attempts issue
+#   a signed passthrough cookie and redirect back instead of blocking access.
+#   That passthrough cookie is distinct from a real successful verification and
+#   stops working as soon as you switch back to enforce or log_only.
+enforcement_mode = "enforce"
+
 # Localhost-only override that allows CAP mode over plain HTTP.
 #
 # This exists only for local development against http://localhost. It does not
