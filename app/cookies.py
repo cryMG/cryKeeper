@@ -5,8 +5,8 @@ import json
 import time
 from typing import Any
 
-TOKEN_SUBJECT_HUMAN = "human"
-TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH = "challenge-passthrough"
+TOKEN_SUBJECT_HUMAN = "human"  # nosec B105
+TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH = "challenge-passthrough"  # nosec B105
 
 
 def _b64url_encode(value: bytes) -> str:
