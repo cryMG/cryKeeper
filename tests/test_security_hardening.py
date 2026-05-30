@@ -81,15 +81,16 @@ class CryKeeperHardeningTests(unittest.TestCase):
         create_app()
 
   def test_cap_mode_allows_explicit_local_http_override(self):
-    app = self._create_app(
-      CRYKEEPER_VERIFICATION_MODE="cap",
-      CRYKEEPER_HUMAN_COOKIE_SECURE="false",
-      CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP="true",
-      CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
-      CRYKEEPER_CAP_ASSET_BASE_URL="http://localhost:3000",
-      CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
-    )
+    with self.assertNoLogs("app", level="WARNING"):
+      app = self._create_app(
+        CRYKEEPER_VERIFICATION_MODE="cap",
+        CRYKEEPER_HUMAN_COOKIE_SECURE="false",
+        CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP="true",
+        CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
+        CRYKEEPER_CAP_ASSET_BASE_URL="http://localhost:3000",
+        CRYKEEPER_CAP_SITE_KEY="site-key",
+        CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      )
 
     local_response = app.test_client().get(
       "/crykeeper/challenge",

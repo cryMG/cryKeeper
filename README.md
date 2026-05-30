@@ -210,9 +210,11 @@ In deployments with `[[website]]` overrides, the same endpoint set is also expos
 cryKeeper also exposes two fixed internal observability endpoints outside the public `path_prefix` namespace:
 
 - `GET /_crykeeper/metrics`: Prometheus exposition endpoint with counters and histograms for auth checks, challenge renders, explicit unsolved challenge attempts, verify outcomes, rate-limit hits, provider latency, and rate-limit backend fallbacks.
-- `GET /_crykeeper/dashboard`: small server-rendered dashboard built from the same live Prometheus metrics. It shows verify success rates, explicit unsolved challenge attempts, dominant failure reasons, provider latency, skip-route bypass counts, rate-limit hits, and backend fallback counts.
+- `GET /_crykeeper/dashboard`: small server-rendered dashboard built from the same live Prometheus metrics. It shows verify success rates, explicit unsolved challenge attempts, dominant failure reasons, provider latency, skip-route bypass counts, rate-limit hits, backend fallback counts, and runtime warnings for common TLS, proxy, cookie, and auth_request header misconfiguration.
 
 These endpoints are meant for private reverse-proxy exposure only, for example on a dedicated internal hostname or an allowlisted admin vhost. They are intentionally not registered below `path_prefix`, so the normal public challenge routes do not expose them automatically.
+
+The dashboards runtime warnings section is intentionally heuristic. It can flag local configuration risks and runtime symptoms such as insecure-transport rejections or missing proxy/auth_request headers like `Host`, `User-Agent`, `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Original-*`, but it does not replace one real browser test through your reverse proxy.
 
 If you run multiple Gunicorn workers, keep Prometheus multiprocess mode enabled so the metrics endpoint aggregates all workers correctly. The bundled Docker image handles this automatically with `CRYKEEPER_PROMETHEUS_MULTIPROC_DIR`.
 

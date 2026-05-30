@@ -61,24 +61,24 @@ def create_app() -> Flask:
 
   if settings.cookie_binding_mode == "none":
     app.logger.warning(
-      "CRYKEEPER_HUMAN_COOKIE_BINDING=none allows copied cookies to be replayed from other clients."
+      "human_cookie_binding=none allows copied cookies to be replayed from other clients."
     )
 
   if settings.enforcement_mode == ENFORCEMENT_MODE_LOG_ONLY:
     app.logger.warning(
-      "CRYKEEPER_ENFORCEMENT_MODE=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout."
+      "enforcement_mode=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout."
     )
 
   if settings.enforcement_mode == ENFORCEMENT_MODE_CHALLENGE_PASSTHROUGH:
     app.logger.warning(
-      "CRYKEEPER_ENFORCEMENT_MODE=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout."
+      "enforcement_mode=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout."
     )
 
   if (
     settings.cookie_binding_mode == "ip-user-agent" and settings.trusted_proxy_hops == 0
   ):
     app.logger.warning(
-      "CRYKEEPER_HUMAN_COOKIE_BINDING=ip-user-agent uses the direct peer address unless CRYKEEPER_TRUSTED_PROXY_HOPS is set for your reverse-proxy chain."
+      "human_cookie_binding=ip-user-agent uses the direct peer address unless trusted_proxy_hops is set for your reverse-proxy chain."
     )
 
   if settings.real_captcha_enabled and not settings.cookie_secure:
@@ -87,14 +87,9 @@ def create_app() -> Flask:
         "Real captcha verification modes require CRYKEEPER_HUMAN_COOKIE_SECURE=true unless CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP=true is set for local-only HTTP testing."
       )
 
-    app.logger.warning(
-      "%s mode is allowing insecure localhost testing because CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP=true. Non-local HTTP requests are still blocked at runtime.",
-      settings.verification_mode.upper(),
-    )
-
   if settings.cookie_secure and not settings.host_cookie_enabled:
     app.logger.warning(
-      "CRYKEEPER_HUMAN_COOKIE_NAME does not use a '__Host-' prefix. Prefer a __Host- cookie when possible."
+      "human_cookie_name does not use a '__Host-' prefix. Prefer a __Host- cookie when possible."
     )
 
   for context_label, effective_settings in _iter_configured_settings(settings_bundle):
@@ -208,7 +203,7 @@ def _log_website_specific_warnings(
     and settings.cookie_binding_mode != default_settings.cookie_binding_mode
   ):
     app.logger.warning(
-      "%sCRYKEEPER_HUMAN_COOKIE_BINDING=none allows copied cookies to be replayed from other clients.",
+      "%shuman_cookie_binding=none allows copied cookies to be replayed from other clients.",
       prefix,
     )
 
@@ -217,7 +212,7 @@ def _log_website_specific_warnings(
     and settings.enforcement_mode != default_settings.enforcement_mode
   ):
     app.logger.warning(
-      "%sCRYKEEPER_ENFORCEMENT_MODE=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout.",
+      "%senforcement_mode=log_only logs would-challenge decisions during GET /check but still allows the protected request through. Disable it after validating your rollout.",
       prefix,
     )
 
@@ -226,19 +221,8 @@ def _log_website_specific_warnings(
     and settings.enforcement_mode != default_settings.enforcement_mode
   ):
     app.logger.warning(
-      "%sCRYKEEPER_ENFORCEMENT_MODE=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout.",
+      "%senforcement_mode=challenge_passthrough still shows the challenge, but failed verification attempts issue a signed passthrough cookie instead of blocking access. Disable it after validating your rollout.",
       prefix,
-    )
-
-  if (
-    settings.real_captcha_enabled
-    and not settings.cookie_secure
-    and settings.allow_insecure_local_cap
-  ):
-    app.logger.warning(
-      "%s%s mode is allowing insecure localhost testing because CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP=true. Non-local HTTP requests are still blocked at runtime.",
-      prefix,
-      settings.verification_mode.upper(),
     )
 
   if (
@@ -250,7 +234,7 @@ def _log_website_specific_warnings(
     )
   ):
     app.logger.warning(
-      "%sCRYKEEPER_HUMAN_COOKIE_NAME does not use a '__Host-' prefix. Prefer a __Host- cookie when possible.",
+      "%shuman_cookie_name does not use a '__Host-' prefix. Prefer a __Host- cookie when possible.",
       prefix,
     )
 

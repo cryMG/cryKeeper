@@ -72,6 +72,7 @@ def check() -> tuple[str, int] | Response:
   """Validate the signed cookie for nginx auth_request subrequests."""
   settings = _settings()
   request_host = _request_host_name()
+  _record_check_header_issues(request_host)
   original_uri = _original_request_uri()
   bypass_reason = _auth_bypass_reason(settings)
   if bypass_reason is not None:
@@ -751,6 +752,51 @@ def _original_request_path() -> str:
   """Extract the path component from the original client request URI."""
   parsed_uri = urlsplit(_original_request_uri())
   return parsed_uri.path or "/"
+
+
+def _record_check_header_issues(request_host: str) -> None:
+  """Track missing auth_request forwarding headers without changing fallbacks."""
+  if not (request.headers.get("Host") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "host",
+    )
+
+  if not (request.headers.get("User-Agent") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "user-agent",
+    )
+
+  if not (request.headers.get("X-Forwarded-For") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "x-forwarded-for",
+    )
+
+  if not (request.headers.get("X-Forwarded-Proto") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "x-forwarded-proto",
+    )
+
+  if not (request.headers.get("X-Original-Method") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "x-original-method",
+    )
+
+  if not (request.headers.get("X-Original-URI") or "").strip():
+    _observability().record_request_header_issue(
+      request_host,
+      "check",
+      "x-original-uri",
+    )
 
 
 def _skip_auth_route_matches(settings: object) -> bool:

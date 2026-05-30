@@ -20,7 +20,8 @@
         <p>
           Prometheus-backed snapshot for challenge flow health, verification quality,
           provider latency, unsolved challenge attempts, skip-route bypasses,
-          and rate-limit behavior.
+          rate-limit behavior, and runtime warnings for common TLS, proxy,
+          cookie, and header setup mistakes.
           Data since last startup, updates every 15 seconds.
         </p>
         <div class="hero-actions">
@@ -183,6 +184,32 @@
                   {% endfor %}
                 </tbody>
               </table>
+            {% endif %}
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Runtime warnings</h2>
+              <p>Actionable heuristics for TLS, proxy, cookie, and auth_request header setup. This is guidance, not end-to-end proof. Confirm reverse-proxy rollouts with one real browser flow and one auth_request check.<br />Reload this page to update the list.</p>
+            </div>
+          </div>
+          <div>
+            {% if snapshot.runtime_warnings %}
+              <ul class="finding-list">
+                {% for finding in snapshot.runtime_warnings %}
+                  <li class="finding finding-{{ finding.status }}">
+                    <div class="finding-heading">
+                      <span class="badge {{ 'danger' if finding.status == 'fail' else 'warning' }}">{{ finding.status_label }}</span>
+                      <h3>{{ finding.title }}</h3>
+                    </div>
+                    <p class="finding-copy">{{ finding.detail }}</p>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="empty">No runtime warnings detected from the current configuration and observed startup metrics.</p>
             {% endif %}
           </div>
         </article>

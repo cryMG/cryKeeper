@@ -26,6 +26,7 @@ CRYKEEPER_PROMETHEUS_DIR_ENV = "CRYKEEPER_PROMETHEUS_MULTIPROC_DIR"
 PROMETHEUS_DIR_ENV = "PROMETHEUS_MULTIPROC_DIR"
 
 _LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+_READINESS_STATUS_ORDER = {"fail": 0, "warn": 1}
 
 observability = Blueprint(
   "crykeeper_observability",
@@ -101,6 +102,12 @@ class CryKeeperObservability:
       "crykeeper_rate_limit_backend_failures",
       "Distributed rate-limit backend failures that triggered a local fallback.",
       labelnames=("backend",),
+      registry=self._registry,
+    )
+    self._request_header_issues = Counter(
+      "crykeeper_request_header_issues",
+      "Missing reverse-proxy forwarding headers detected on incoming requests.",
+      labelnames=("host", "endpoint", "header"),
       registry=self._registry,
     )
 
@@ -184,6 +191,19 @@ class CryKeeperObservability:
     """Count one distributed backend failure before the limiter falls back locally."""
     self._rate_limit_backend_failures.labels(backend=backend).inc()
 
+  def record_request_header_issue(
+    self,
+    host: str,
+    endpoint: str,
+    header_name: str,
+  ) -> None:
+    """Count one request that reached the app without an expected proxy header."""
+    self._request_header_issues.labels(
+      host=_metric_host(host),
+      endpoint=endpoint,
+      header=header_name,
+    ).inc()
+
   def render_metrics(self) -> bytes:
     """Render the Prometheus exposition payload for the current registry."""
     return generate_latest(self._collector_registry())
@@ -254,6 +274,10 @@ class CryKeeperObservability:
       "latency_rows": _provider_latency_rows(samples),
       "rate_limit_rows": _rate_limit_rows(samples),
       "backend_failure_rows": _backend_failure_rows(samples),
+      "runtime_warnings": _runtime_warnings(
+        samples,
+        current_app.config["SETTINGS_BUNDLE"],
+      ),
       "metrics_path": f"{INTERNAL_OBSERVABILITY_PATH}/metrics",
       "dashboard_path": f"{INTERNAL_OBSERVABILITY_PATH}/dashboard",
     }
@@ -467,6 +491,146 @@ def _backend_failure_rows(samples: dict[str, list[object]]) -> list[dict[str, st
     for sample in samples.get("crykeeper_rate_limit_backend_failures_total", ())
   ]
   return sorted(rows, key=lambda item: item["backend"])
+
+
+def _runtime_warnings(
+  samples: dict[str, list[object]],
+  settings_bundle: object,
+) -> list[dict[str, str]]:
+  """Build actionable runtime warnings from static config and live metrics."""
+  warnings: list[dict[str, str]] = []
+  contexts = list(_settings_contexts(settings_bundle))
+  default_settings = settings_bundle.default_settings
+
+  if default_settings.trusted_proxy_hops == 0:
+    warnings.append(
+      _runtime_warning(
+        "warn",
+        "Trusted proxy hops are disabled",
+        "trusted_proxy_hops=0 is fine for direct localhost access, but a TLS-terminating reverse proxy will not make request.is_secure or forwarded client IPs trustworthy.",
+      )
+    )
+
+  insecure_cookie_contexts = [
+    label
+    for label, settings in contexts
+    if not settings.cookie_secure
+    and not (settings.real_captcha_enabled and settings.allow_insecure_local_cap)
+  ]
+  if insecure_cookie_contexts:
+    warnings.append(
+      _runtime_warning(
+        "warn",
+        "Secure cookies are disabled",
+        f"{_format_context_labels(insecure_cookie_contexts)} use human_cookie_secure=false. That is suitable for local HTTP wiring only; non-local challenge and verify flows without HTTPS will be rejected.",
+      )
+    )
+
+  ip_binding_without_proxy_contexts = [
+    label
+    for label, settings in contexts
+    if settings.cookie_binding_mode == "ip-user-agent"
+    and default_settings.trusted_proxy_hops == 0
+  ]
+  if ip_binding_without_proxy_contexts:
+    warnings.append(
+      _runtime_warning(
+        "warn",
+        "IP-bound cookies depend on the direct peer",
+        f"{_format_context_labels(ip_binding_without_proxy_contexts)} use human_cookie_binding=ip-user-agent while trusted_proxy_hops is disabled. Cookie binding will follow the direct socket peer instead of the forwarded client IP.",
+      )
+    )
+
+  non_host_cookie_contexts = [
+    label
+    for label, settings in contexts
+    if settings.cookie_secure and not settings.host_cookie_enabled
+  ]
+  if non_host_cookie_contexts:
+    warnings.append(
+      _runtime_warning(
+        "warn",
+        "Secure cookies are not using a __Host- prefix",
+        f"{_format_context_labels(non_host_cookie_contexts)} enable secure cookies, but human_cookie_name is not __Host- scoped. Prefer the default secure cookie name when the deployment allows it.",
+      )
+    )
+
+  insecure_transport_total = _sum_labeled_samples(
+    samples,
+    "crykeeper_challenge_requests_total",
+    outcome="insecure_transport",
+  ) + _sum_labeled_samples(
+    samples,
+    "crykeeper_verify_attempts_total",
+    outcome="insecure_transport",
+  )
+  if insecure_transport_total:
+    warnings.append(
+      _runtime_warning(
+        "fail",
+        "Insecure transport rejections observed",
+        f"cryKeeper rejected {_format_integer(insecure_transport_total)} challenge or verify requests since startup because the request did not look secure. Check TLS termination, X-Forwarded-Proto forwarding, and trusted_proxy_hops.",
+      )
+    )
+
+  header_issue_counts = _request_header_issue_counts(samples)
+  if header_issue_counts:
+    warnings.append(
+      _runtime_warning(
+        "fail",
+        "Missing auth_request headers observed",
+        "GET /check saw missing proxy and auth_request headers: "
+        + ", ".join(
+          f"{header} {_format_integer(count)}"
+          for header, count in sorted(header_issue_counts.items())
+        )
+        + " since startup. Check nginx auth_request forwarding for host, user-agent, x-forwarded-for, x-forwarded-proto, x-original-method, and x-original-uri.",
+      )
+    )
+
+  return sorted(
+    warnings,
+    key=lambda item: (
+      _READINESS_STATUS_ORDER.get(item["status"], len(_READINESS_STATUS_ORDER)),
+      item["title"],
+    ),
+  )
+
+
+def _settings_contexts(settings_bundle: object):
+  """Yield shared defaults followed by every website-specific config context."""
+  yield "defaults", settings_bundle.default_settings
+  for website in settings_bundle.websites:
+    yield f"website[{', '.join(website.domains)}]", website.settings
+
+
+def _format_context_labels(labels: list[str]) -> str:
+  """Render one short human-readable list of config contexts."""
+  if len(labels) == 1:
+    return labels[0]
+  if len(labels) == 2:
+    return f"{labels[0]} and {labels[1]}"
+  return f"{', '.join(labels[:-1])}, and {labels[-1]}"
+
+
+def _runtime_warning(status: str, title: str, detail: str) -> dict[str, str]:
+  """Build one runtime warning row for the dashboard template."""
+  return {
+    "status": status,
+    "status_label": "Fail" if status == "fail" else "Warn",
+    "title": title,
+    "detail": detail,
+  }
+
+
+def _request_header_issue_counts(
+  samples: dict[str, list[object]],
+) -> dict[str, float]:
+  """Collapse missing-header observations into one total per header name."""
+  counts: dict[str, float] = defaultdict(float)
+  for sample in samples.get("crykeeper_request_header_issues_total", ()):
+    counts[sample.labels.get("header", "unknown")] += sample.value
+  return dict(counts)
 
 
 def _histogram_snapshot(

@@ -51,8 +51,10 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertIn("crykeeper_check_requests_total", metrics_body)
     self.assertIn("crykeeper_challenge_requests_total", metrics_body)
     self.assertIn("crykeeper_unsolved_challenge_attempts", metrics_body)
+    self.assertIn("crykeeper_request_header_issues_total", metrics_body)
     self.assertIn("crykeeper_verify_attempts_total", metrics_body)
     self.assertIn('host="localhost"', metrics_body)
+    self.assertIn('header="x-original-method"', metrics_body)
     self.assertIn('provider="dummy"', metrics_body)
     self.assertIn('outcome="success"', metrics_body)
 
@@ -114,6 +116,9 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertNotIn('http-equiv="refresh"', dashboard_body)
     self.assertIn("Verify outcomes", dashboard_body)
     self.assertIn("Rate limits", dashboard_body)
+    self.assertIn("Runtime warnings", dashboard_body)
+    self.assertIn("Trusted proxy hops are disabled", dashboard_body)
+    self.assertIn("trusted_proxy_hops=0", dashboard_body)
     self.assertIn("localhost", dashboard_body)
     self.assertIn("dummy", dashboard_body)
     self.assertIn("data-dashboard-root", dashboard_body)
@@ -130,12 +135,101 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       'Powered by <a href="https://github.com/cryMG/cryKeeper"',
       dashboard_body,
     )
+    self.assertIn("Heuristic guidance only", dashboard_body)
     self.assertNotIn(
       "custom footer that should not appear on the dashboard",
       dashboard_body,
     )
     self.assertIn("crykeeper_unsolved_challenge_attempts_total", metrics_body)
     self.assertIn('reason="rate_limited"', metrics_body)
+
+  def test_dashboard_surfaces_runtime_tls_and_header_warnings(self):
+    app = self._create_app(
+      CRYKEEPER_HUMAN_COOKIE_SECURE="true",
+    )
+    client = app.test_client()
+
+    check_response = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={"User-Agent": ""},
+    )
+    challenge_response = client.get(
+      "/crykeeper/challenge",
+      base_url="http://example.com",
+      query_string={"return": "/ok"},
+    )
+    dashboard_response = client.get(
+      "/_crykeeper/dashboard",
+      base_url="http://localhost",
+    )
+
+    self.assertEqual(401, check_response.status_code)
+    self.assertEqual(400, challenge_response.status_code)
+    self.assertEqual(200, dashboard_response.status_code)
+
+    dashboard_body = dashboard_response.get_data(as_text=True)
+    self.assertIn("Missing auth_request headers observed", dashboard_body)
+    self.assertIn("proxy and auth_request headers", dashboard_body)
+    self.assertIn("user-agent 1", dashboard_body)
+    self.assertIn("x-forwarded-for 1", dashboard_body)
+    self.assertIn("x-forwarded-proto 1", dashboard_body)
+    self.assertIn("x-original-method 1", dashboard_body)
+    self.assertIn("x-original-uri 1", dashboard_body)
+    self.assertIn("Insecure transport rejections observed", dashboard_body)
+    self.assertIn("trusted_proxy_hops", dashboard_body)
+
+  def test_dashboard_surfaces_missing_host_header_warning(self):
+    app = self._create_app()
+    client = app.test_client()
+
+    check_response = client.get(
+      "/crykeeper/check",
+      base_url="http://localhost",
+      headers={
+        "Host": "",
+        "User-Agent": "UA",
+        "X-Forwarded-For": "203.0.113.10",
+        "X-Forwarded-Proto": "https",
+        "X-Original-Method": "GET",
+        "X-Original-URI": "/ok",
+      },
+      environ_overrides={"HTTP_HOST": ""},
+    )
+    dashboard_response = client.get(
+      "/_crykeeper/dashboard",
+      base_url="http://localhost",
+    )
+
+    self.assertEqual(401, check_response.status_code)
+    self.assertEqual(200, dashboard_response.status_code)
+
+    dashboard_body = dashboard_response.get_data(as_text=True)
+    self.assertIn("Missing auth_request headers observed", dashboard_body)
+    self.assertIn("host 1", dashboard_body)
+
+  def test_dashboard_does_not_warn_for_legitimate_local_cap_http_override(self):
+    app = self._create_app(
+      CRYKEEPER_VERIFICATION_MODE="cap",
+      CRYKEEPER_HUMAN_COOKIE_SECURE="false",
+      CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP="true",
+      CRYKEEPER_TRUSTED_PROXY_HOPS="1",
+      CRYKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
+      CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
+      CRYKEEPER_CAP_SITE_KEY="site-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+    )
+
+    dashboard_response = app.test_client().get(
+      "/_crykeeper/dashboard",
+      base_url="http://localhost",
+    )
+
+    self.assertEqual(200, dashboard_response.status_code)
+    dashboard_body = dashboard_response.get_data(as_text=True)
+    self.assertIn("No runtime warnings detected", dashboard_body)
+    self.assertNotIn("allow_insecure_local_cap", dashboard_body)
+    self.assertNotIn("Local real-captcha HTTP override is active", dashboard_body)
 
   def test_metrics_are_not_served_below_public_path_prefix(self):
     app = self._create_app()
