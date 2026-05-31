@@ -43,7 +43,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     )
 
     self.assertEqual(200, challenge_response.status_code)
-    self.assertEqual(302, verify_response.status_code)
+    self.assertEqual(200, verify_response.status_code)
     self.assertEqual(204, check_response.status_code)
     self.assertEqual(200, metrics_response.status_code)
 

@@ -277,7 +277,7 @@ def verify() -> Response:
           "reason": _verification_metric_reason(verification_result),
         },
       )
-      return _redirect_with_access_cookie(
+      return _render_return_page_with_access_cookie(
         return_path,
         settings,
         TOKEN_SUBJECT_CHALLENGE_PASSTHROUGH,
@@ -289,7 +289,11 @@ def verify() -> Response:
       status_code=status_code,
     )
 
-  response = _redirect_with_access_cookie(return_path, settings, TOKEN_SUBJECT_HUMAN)
+  response = _render_return_page_with_access_cookie(
+    return_path,
+    settings,
+    TOKEN_SUBJECT_HUMAN,
+  )
   _observability().record_verify_result(
     request_host,
     settings.verification_mode,
@@ -433,6 +437,35 @@ def _render_challenge(
   return response
 
 
+def _render_return_page(return_path: str, settings: object) -> Response:
+  """Render the post-verify continuation page that sends the browser to the target."""
+  language_code, translations = get_translations(request.accept_languages)
+  response = make_response(
+    render_template(
+      "verify_redirect.html",
+      language_code=language_code,
+      translations=translations,
+      footer_html=_challenge_footer_html(settings, language_code),
+      return_path=return_path,
+      challenge_shared_style_url=_crykeeper_path(settings, "/static/ui.css"),
+      challenge_shared_script_url=_crykeeper_path(
+        settings, "/static/challenge-common.js"
+      ),
+      verify_redirect_script_url=_crykeeper_path(
+        settings, "/static/verify-redirect.js"
+      ),
+    ),
+    HTTPStatus.OK,
+  )
+  response.headers["Cache-Control"] = "no-store"
+  response.headers["Pragma"] = "no-cache"
+  response.headers["Referrer-Policy"] = "same-origin"
+  response.headers["X-Content-Type-Options"] = "nosniff"
+  response.headers["X-Frame-Options"] = "DENY"
+  response.headers["Content-Security-Policy"] = _return_page_content_security_policy()
+  return response
+
+
 def _challenge_footer_html(settings: object, language_code: str) -> str:
   """Return the configured footer or the shared default when none is set."""
   configured_footer = settings.footer_html.resolve(language_code).strip()
@@ -466,21 +499,20 @@ def _clear_verification_cookie(response: Response, settings: object) -> None:
   )
 
 
-def _redirect_with_access_cookie(
+def _render_return_page_with_access_cookie(
   return_path: str,
   settings: object,
   subject: str,
 ) -> Response:
-  """Redirect back to the validated target after issuing one signed access cookie."""
+  """Issue one signed access cookie and return the browser continuation page."""
   token = issue_token_for_client(
     settings.secret_key,
     settings.cookie_ttl_seconds,
     client_binding=_client_binding_value(settings.cookie_binding_mode),
     subject=subject,
   )
-  response = redirect("/" + return_path.lstrip("/"), code=HTTPStatus.FOUND)
+  response = _render_return_page(return_path, settings)
   _set_verification_cookie(response, settings, token)
-  response.headers["Cache-Control"] = "no-store"
   return response
 
 
@@ -671,6 +703,27 @@ def _content_security_policy(settings: object) -> str:
     ("font-src", ["'self'", "data:"]),
     ("connect-src", _dedupe(connect_sources)),
     ("worker-src", _dedupe(worker_sources)),
+  )
+  return "; ".join(f"{name} {' '.join(values)}" for name, values in directives)
+
+
+def _return_page_content_security_policy() -> str:
+  """Allow only the local assets needed for the post-verify continuation page."""
+  directives = (
+    ("default-src", ["'self'"]),
+    ("base-uri", ["'none'"]),
+    ("frame-ancestors", ["'none'"]),
+    ("frame-src", ["'none'"]),
+    ("form-action", ["'none'"]),
+    ("object-src", ["'none'"]),
+    ("script-src", ["'self'"]),
+    ("script-src-elem", ["'self'"]),
+    ("script-src-attr", ["'none'"]),
+    ("style-src", ["'self'"]),
+    ("img-src", ["'self'", "data:"]),
+    ("font-src", ["'self'", "data:"]),
+    ("connect-src", ["'none'"]),
+    ("worker-src", ["'none'"]),
   )
   return "; ".join(f"{name} {' '.join(values)}" for name, values in directives)
 

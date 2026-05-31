@@ -1,4 +1,39 @@
 (() => {
+  const returnFragmentStorageKey = (returnPath) =>
+    `crykeeper:return-fragment:${returnPath || "/"}`;
+
+  const storeReturnFragment = (returnPath, fragment) => {
+    if (!returnPath) {
+      return;
+    }
+
+    try {
+      if (fragment) {
+        window.sessionStorage.setItem(
+          returnFragmentStorageKey(returnPath),
+          fragment,
+        );
+      } else {
+        window.sessionStorage.removeItem(returnFragmentStorageKey(returnPath));
+      }
+    } catch { /* noop */ }
+  };
+
+  const takeReturnFragment = (returnPath) => {
+    if (!returnPath) {
+      return "";
+    }
+
+    try {
+      const fragment =
+        window.sessionStorage.getItem(returnFragmentStorageKey(returnPath)) || "";
+      window.sessionStorage.removeItem(returnFragmentStorageKey(returnPath));
+      return fragment.startsWith("#") ? fragment : "";
+    } catch {
+      return "";
+    }
+  };
+
   const parseJson = (rawValue) => {
     if (!rawValue) {
       return {};
@@ -49,6 +84,7 @@
 
   const init = () => {
     const form = document.getElementById("verification-form");
+    const returnPathInput = form?.querySelector('[name="return"]');
     const progressBar = document.getElementById("progress-bar");
     const progressPercent = document.getElementById("progress-percent");
     const statusText = document.getElementById("status-text");
@@ -57,6 +93,14 @@
     if (!form || !progressBar || !progressPercent || !statusText || !progressShell) {
       return null;
     }
+
+    const syncReturnFragment = () => {
+      storeReturnFragment(returnPathInput?.value || "", window.location.hash || "");
+    };
+
+    syncReturnFragment();
+    window.addEventListener("hashchange", syncReturnFragment);
+    form.addEventListener("submit", syncReturnFragment);
 
     return {
       form,
@@ -80,6 +124,7 @@
       },
       clearError,
       submit() {
+        syncReturnFragment();
         if (typeof form.requestSubmit === "function") {
           form.requestSubmit();
           return;
@@ -93,5 +138,10 @@
     };
   };
 
-  window.CryKeeperChallenge = { init, parseJson };
+  window.CryKeeperChallenge = {
+    init,
+    parseJson,
+    storeReturnFragment,
+    takeReturnFragment,
+  };
 })();

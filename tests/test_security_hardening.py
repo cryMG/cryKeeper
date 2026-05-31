@@ -630,7 +630,8 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, first.status_code)
+    self.assertEqual(200, first.status_code)
+    self.assertIn('data-return-path="/ok"', first.get_data(as_text=True))
     self.assertEqual(429, limited.status_code)
     self.assertEqual("45", limited.headers["Retry-After"])
 
@@ -735,8 +736,9 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, response.status_code)
-    self.assertEqual("/", response.headers["Location"])
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn("Location", response.headers)
+    self.assertIn('data-return-path="/"', response.get_data(as_text=True))
 
   def test_verify_replaces_percent_encoded_backslash_return_path_with_root(self):
     app = self._create_app()
@@ -747,8 +749,20 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, response.status_code)
-    self.assertEqual("/", response.headers["Location"])
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn("Location", response.headers)
+    self.assertIn('data-return-path="/"', response.get_data(as_text=True))
+
+  def test_challenge_page_keeps_hash_client_side(self):
+    app = self._create_app()
+    response = app.test_client().get(
+      "/crykeeper/challenge",
+      base_url="http://localhost",
+      query_string={"return": "/ok"},
+    )
+
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn('name="return_fragment"', response.get_data(as_text=True))
 
   def test_cap_verify_requires_token(self):
     app = self._create_app(
@@ -768,7 +782,9 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertNotIn("Set-Cookie", response.headers)
 
   @patch("app.routes.verify_cap_token")
-  def test_cap_verify_success_sets_cookie_and_redirects(self, verify_cap_token):
+  def test_cap_verify_success_sets_cookie_and_returns_completion_page(
+    self, verify_cap_token
+  ):
     verify_cap_token.return_value = CapVerificationResult(
       success=True,
       retryable=False,
@@ -790,8 +806,11 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, response.status_code)
-    self.assertEqual("/ok", response.headers["Location"])
+    body = response.get_data(as_text=True)
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn("Location", response.headers)
+    self.assertIn('data-return-path="/ok"', body)
+    self.assertIn("/crykeeper/static/verify-redirect.js", body)
     self.assertIn("Set-Cookie", response.headers)
     verify_cap_token.assert_called_once_with(
       "https://cap.example.com/site-key/siteverify",
@@ -858,6 +877,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertIn("https://cap.example.com/assets/widget.js", body)
     self.assertNotIn("<script>", body)
     self.assertNotIn('type="application/json"', body)
+    self.assertNotIn('name="return_fragment"', body)
 
   def test_dummy_challenge_page_uses_dummy_script_only(self):
     app = self._create_app()
@@ -917,7 +937,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertIn("worker-src 'self' blob:", csp)
 
   @patch("app.routes.verify_hcaptcha_request")
-  def test_hcaptcha_verify_success_sets_cookie_and_redirects(
+  def test_hcaptcha_verify_success_sets_cookie_and_returns_completion_page(
     self, verify_hcaptcha_request
   ):
     verify_hcaptcha_request.return_value = VerificationResult(
@@ -938,8 +958,9 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, response.status_code)
-    self.assertEqual("/ok", response.headers["Location"])
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn("Location", response.headers)
+    self.assertIn('data-return-path="/ok"', response.get_data(as_text=True))
     verify_hcaptcha_request.assert_called_once()
 
   @patch("app.routes.verify_hcaptcha_request")
@@ -996,7 +1017,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     verify_hcaptcha_request.assert_called_once()
 
   @patch("app.routes.verify_hcaptcha_request")
-  def test_challenge_passthrough_redirects_after_failed_verification(
+  def test_challenge_passthrough_returns_completion_page_after_failed_verification(
     self, verify_hcaptcha_request
   ):
     verify_hcaptcha_request.return_value = VerificationResult(
@@ -1034,8 +1055,9 @@ class CryKeeperHardeningTests(unittest.TestCase):
     )
 
     self.assertEqual(401, first_check.status_code)
-    self.assertEqual(302, verify_response.status_code)
-    self.assertEqual("/ok", verify_response.headers["Location"])
+    self.assertEqual(200, verify_response.status_code)
+    self.assertNotIn("Location", verify_response.headers)
+    self.assertIn('data-return-path="/ok"', verify_response.get_data(as_text=True))
     self.assertIn("Set-Cookie", verify_response.headers)
     self.assertEqual(204, second_check.status_code)
     verify_hcaptcha_request.assert_called_once()
@@ -1058,7 +1080,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     self.assertEqual(200, response.status_code)
     self.assertEqual({"challenge": "payload"}, response.get_json())
 
-  def test_altcha_verify_success_sets_cookie_and_redirects(self):
+  def test_altcha_verify_success_sets_cookie_and_returns_completion_page(self):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="altcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
@@ -1090,8 +1112,40 @@ class CryKeeperHardeningTests(unittest.TestCase):
       headers={"User-Agent": "UA"},
     )
 
-    self.assertEqual(302, response.status_code)
-    self.assertEqual("/ok", response.headers["Location"])
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn("Location", response.headers)
+    self.assertIn('data-return-path="/ok"', response.get_data(as_text=True))
+
+  def test_verify_redirect_page_renders_configured_footer_html_and_keeps_body(self):
+    app = self._create_app(CRYKEEPER_FOOTER_HTML="powered by <strong>cryMG</strong>")
+    response = app.test_client().post(
+      "/crykeeper/verify",
+      base_url="http://localhost",
+      data={"return": "/ok"},
+      headers={"User-Agent": "UA"},
+    )
+
+    body = response.get_data(as_text=True)
+    self.assertEqual(200, response.status_code)
+    self.assertIn("powered by <strong>cryMG</strong>", body)
+    self.assertNotIn("powered by &lt;strong&gt;cryMG&lt;/strong&gt;", body)
+
+  def test_verify_redirect_page_hides_footer_when_configured_as_dash(self):
+    app = self._create_app(CRYKEEPER_FOOTER_HTML="-")
+    response = app.test_client().post(
+      "/crykeeper/verify",
+      base_url="http://localhost",
+      data={"return": "/ok"},
+      headers={"User-Agent": "UA"},
+    )
+
+    body = response.get_data(as_text=True)
+    self.assertEqual(200, response.status_code)
+    self.assertNotIn(
+      'Powered by <a href="https://github.com/cryMG/cryKeeper"',
+      body,
+    )
+    self.assertNotIn("<footer>", body)
 
   def test_altcha_bundled_widget_is_served_locally(self):
     app = self._create_app(

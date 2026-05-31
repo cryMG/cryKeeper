@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="{{ language_code }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ translations.page_title }}</title>
+  <link rel="stylesheet" href="{{ challenge_shared_style_url }}">
+  <script src="{{ challenge_shared_script_url }}" defer></script>
+  <script src="{{ verify_redirect_script_url }}" defer></script>
+</head>
+<body>
+  <main id="verify-redirect" data-return-path="{{ return_path }}">
+    <p class="eyebrow">{{ translations.eyebrow }}</p>
+    <h1>{{ translations.progress_complete }}</h1>
+    <p><a href="{{ return_path }}">{{ translations.dummy_continue }}</a></p>
+    <noscript>
+      <p class="error">{{ translations.noscript_required }}</p>
+    </noscript>
+  </main>
+  {% if footer_html != "-" %}
+  <footer><p>{{ footer_html | safe }}</p></footer>
+  {% endif %}
+</body>
+</html>

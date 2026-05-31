@@ -51,7 +51,7 @@ By default, **cryKeeper** focuses strictly on verifying human behavior. This mea
 - cryKeeper first evaluates configured auth bypasses for routes, client IPs, User-Agents, and optional known search-engine crawlers. If one matches, cryKeeper returns 204 immediately.
 - Otherwise cryKeeper checks the signed verification cookie. If it is valid, cryKeeper returns 204 and nginx forwards the original request to the website.
 - If the cookie is missing or invalid, cryKeeper returns 401 together with an X-Auth-Redirect header so nginx can redirect to, or internally proxy, the challenge page.
-- After a successful challenge, cryKeeper sets a new signed verification cookie and redirects the browser back to the validated original target.
+- After a successful challenge, cryKeeper sets a new signed verification cookie and returns a minimal no-store completion page that sends the browser back to the validated original target without exposing URL fragments to the backend.
 
 ## Supported verification modes
 
@@ -192,6 +192,7 @@ When nginx terminates HTTPS before forwarding to cryKeeper over HTTP, set `trust
 
 Keep the public prefix in nginx aligned with your configured `path_prefix`. If you use per-host `[[website]]` overrides, each host must forward to the matching cryKeeper prefix.
 The example above internally proxies the challenge page so the browser keeps the original protected URL visible while still receiving `403 Forbidden`. If you prefer a visible jump to the cryKeeper path instead, you can replace the named location body with `return 302 $auth_redirect;` and change the `error_page` line back to `error_page 401 = @crykeeper_challenge;`.
+That internal-proxy pattern is also what lets cryKeeper preserve client-side URL fragments after verification without sending them to the backend. A visible redirect to `<path_prefix>/challenge` loses the fragment before the challenge page can store it.
 
 ## Endpoint Overview
 
@@ -199,7 +200,7 @@ Every configured `path_prefix` exposes the same set of cryKeeper endpoints. With
 
 - `GET <path_prefix>/check`: internal auth endpoint for nginx `auth_request`. Returns `204 No Content` when a configured bypass matches or when the signed verification cookie is valid, or `401 Unauthorized` plus the `X-Auth-Redirect` header when nginx should hand the browser over to the challenge flow, for example by internally proxying the challenge page with a `403 Forbidden` response. In `log_only`, cryKeeper logs those would-challenge decisions but returns `204 No Content` instead. In `challenge_passthrough`, it also accepts a signed passthrough cookie created after a failed verification while that mode remains active.
 - `GET <path_prefix>/challenge`: browser-facing challenge page. Renders the configured verification flow, respects the safe local `return` query parameter, enforces the secure-transport rules, and applies the challenge rate limit.
-- `POST <path_prefix>/verify`: completes the active provider verification, sets the signed verification cookie, and redirects the browser to the validated local `return` path. This endpoint is protected by the verify rate limit. In `challenge_passthrough`, failed verifies redirect back with a signed passthrough cookie instead of blocking access.
+- `POST <path_prefix>/verify`: completes the active provider verification, sets the signed verification cookie, and returns a small no-store HTML completion page that continues the browser to the validated local `return` path. That final browser-side hop keeps URL fragments client-side when the challenge itself was shown without leaving the original protected URL. This endpoint is protected by the verify rate limit. In `challenge_passthrough`, failed verifies return the same completion page with a signed passthrough cookie instead of blocking access.
 - `GET <path_prefix>/altcha/challenge`: provider-specific ALTCHA challenge endpoint. Returns a fresh signed ALTCHA challenge as JSON and applies the same secure-transport and challenge rate-limit checks as the HTML challenge page.
 - `GET <path_prefix>/clear`: removes the verification cookie and redirects to the validated local `return` path, falling back to `/` if the parameter is missing or invalid.
 - `GET <path_prefix>/healthz`: minimal liveness endpoint for container and reverse-proxy health checks. Returns `200 OK` with the body `ok`.
@@ -304,7 +305,7 @@ export CRYKEEPER_ENFORCEMENT_MODE=log_only
 
 With `enforcement_mode = "log_only"`, cryKeeper still evaluates bypass rules, cookies, and return-path handling during `GET <path_prefix>/check`, and logs every request that would have been challenged. The difference is only in enforcement: cryKeeper returns `204 No Content` instead of `401 Unauthorized`, so nginx continues to the protected upstream.
 
-With `enforcement_mode = "challenge_passthrough"`, cryKeeper still shows the normal challenge. If `POST <path_prefix>/verify` fails, cryKeeper records the failed verification outcome but redirects back with a signed passthrough cookie instead of blocking access. That passthrough cookie is not a real human-verification cookie and is ignored again as soon as you switch back to `enforce` or `log_only`.
+With `enforcement_mode = "challenge_passthrough"`, cryKeeper still shows the normal challenge. If `POST <path_prefix>/verify` fails, cryKeeper records the failed verification outcome but returns the same completion page with a signed passthrough cookie instead of blocking access. That passthrough cookie is not a real human-verification cookie and is ignored again as soon as you switch back to `enforce` or `log_only`.
 
 This is intended for safe live rollouts of new prefixes, bypasses, proxy handling, and challenge UX changes. Only a real successful verification creates the normal human-verification cookie.
 
