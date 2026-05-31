@@ -290,7 +290,7 @@ class WebsiteRateLimiter:
 
     if not self._valkey_url:
       raise RuntimeError(
-        "CRYKEEPER_RATE_LIMIT_BACKEND=valkey requires CRYKEEPER_RATE_LIMIT_VALKEY_URL "
+        "rate_limit_backend=valkey requires rate_limit_valkey_url "
         "or shared rate_limit_valkey_url under [crykeeper]."
       )
 

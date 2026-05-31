@@ -129,6 +129,15 @@ def _config_key(name: str) -> str:
   raise RuntimeError(f"{name} is not a cryKeeper setting.")
 
 
+def config_option_label(name: str) -> str:
+  """Return the canonical TOML key shown in user-visible config messages."""
+  if name.startswith(ENV_PREFIX):
+    key = name.removeprefix(ENV_PREFIX).lower()
+    if key in KNOWN_CONFIG_KEYS:
+      return key
+  return name
+
+
 def _read_config_file_path() -> Path:
   """Resolve the configured TOML file path, falling back to the container default."""
   raw_value = os.getenv(_env_name("CONFIG_FILE"), DEFAULT_CONFIG_FILE)
@@ -344,12 +353,13 @@ def _strip_trailing_slash(value: str) -> str:
 
 def _read_text(config_source: ConfigSource, name: str, default: str) -> str:
   """Read raw string settings from env vars or the TOML file."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
 
   if not isinstance(raw_value, str):
-    raise RuntimeError(f"{name} must be a string.")
+    raise RuntimeError(f"{option_name} must be a string.")
 
   return raw_value
 
@@ -362,12 +372,13 @@ def _read_base_url(
   blank_uses_default: bool = False,
 ) -> str:
   """Read URL-like settings while normalizing trailing slashes."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
 
   if not isinstance(raw_value, str):
-    raise RuntimeError(f"{name} must be a string.")
+    raise RuntimeError(f"{option_name} must be a string.")
 
   value = raw_value.strip()
   if blank_uses_default and not value:
@@ -378,6 +389,7 @@ def _read_base_url(
 
 def _read_bool(config_source: ConfigSource, name: str, default: bool) -> bool:
   """Read relaxed boolean env vars such as true/1/yes/on."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
@@ -388,17 +400,18 @@ def _read_bool(config_source: ConfigSource, name: str, default: bool) -> bool:
   if isinstance(raw_value, str):
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
-  raise RuntimeError(f"{name} must be a boolean.")
+  raise RuntimeError(f"{option_name} must be a boolean.")
 
 
 def _read_int(config_source: ConfigSource, name: str, default: int) -> int:
   """Read integer env vars while keeping the caller-side defaults in one place."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
 
   if isinstance(raw_value, bool):
-    raise RuntimeError(f"{name} must be an integer.")
+    raise RuntimeError(f"{option_name} must be an integer.")
 
   if isinstance(raw_value, int):
     return raw_value
@@ -407,21 +420,23 @@ def _read_int(config_source: ConfigSource, name: str, default: int) -> int:
     try:
       return int(raw_value.strip())
     except ValueError as exc:
-      raise RuntimeError(f"{name} must be an integer.") from exc
+      raise RuntimeError(f"{option_name} must be an integer.") from exc
 
-  raise RuntimeError(f"{name} must be an integer.")
+  raise RuntimeError(f"{option_name} must be an integer.")
 
 
 def _read_non_negative_int(config_source: ConfigSource, name: str, default: int) -> int:
   """Read integer env vars that may be disabled with 0 but never go below it."""
+  option_name = config_option_label(name)
   value = _read_int(config_source, name, default)
   if value < 0:
-    raise RuntimeError(f"{name} must be greater than or equal to 0.")
+    raise RuntimeError(f"{option_name} must be greater than or equal to 0.")
   return value
 
 
 def _read_csv_values(config_source: ConfigSource, name: str) -> tuple[str, ...]:
   """Read comma-separated string lists while ignoring empty segments."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return ()
@@ -433,45 +448,46 @@ def _read_csv_values(config_source: ConfigSource, name: str) -> tuple[str, ...]:
     values: list[str] = []
     for value in raw_value:
       if not isinstance(value, str):
-        raise RuntimeError(f"{name} must contain only string values.")
+        raise RuntimeError(f"{option_name} must contain only string values.")
       normalized_value = value.strip()
       if normalized_value:
         values.append(normalized_value)
     return tuple(values)
 
-  raise RuntimeError(f"{name} must be a comma-separated string or TOML array.")
+  raise RuntimeError(f"{option_name} must be a comma-separated string or TOML array.")
 
 
 def _read_path_prefix(config_source: ConfigSource, name: str, default: str) -> str:
   """Read and validate the public path prefix reserved for cryKeeper routes."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return default
 
   if not isinstance(raw_value, str):
-    raise RuntimeError(f"{name} must be a string.")
+    raise RuntimeError(f"{option_name} must be a string.")
 
   value = raw_value.strip()
   if not value:
     return default
 
   if value == "/":
-    raise RuntimeError(f"{name} must not be '/'.")
+    raise RuntimeError(f"{option_name} must not be '/'.")
 
   if not value.startswith("/"):
-    raise RuntimeError(f"{name} must start with '/'.")
+    raise RuntimeError(f"{option_name} must start with '/'.")
 
   if value.endswith("/"):
-    raise RuntimeError(f"{name} must not end with '/'.")
+    raise RuntimeError(f"{option_name} must not end with '/'.")
 
   if "?" in value or "#" in value or "//" in value:
     raise RuntimeError(
-      f"{name} must be a clean path prefix without query strings, fragments, or double slashes."
+      f"{option_name} must be a clean path prefix without query strings, fragments, or double slashes."
     )
 
   if value == INTERNAL_OBSERVABILITY_PATH:
     raise RuntimeError(
-      f"{name} must not be '{INTERNAL_OBSERVABILITY_PATH}' because that prefix is reserved for internal observability endpoints."
+      f"{option_name} must not be '{INTERNAL_OBSERVABILITY_PATH}' because that prefix is reserved for internal observability endpoints."
     )
 
   return value
@@ -479,9 +495,10 @@ def _read_path_prefix(config_source: ConfigSource, name: str, default: str) -> s
 
 def _read_cookie_name(config_source: ConfigSource, name: str, secure: bool) -> str:
   """Choose a host-scoped cookie by default once the deployment uses HTTPS."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is not None and not isinstance(raw_value, str):
-    raise RuntimeError(f"{name} must be a string.")
+    raise RuntimeError(f"{option_name} must be a string.")
 
   value = (raw_value or "").strip()
 
@@ -493,7 +510,7 @@ def _read_cookie_name(config_source: ConfigSource, name: str, secure: bool) -> s
 
   if value.startswith("__Host-") and not secure:
     raise RuntimeError(
-      f"{name} uses a '__Host-' prefix and therefore requires CRYKEEPER_HUMAN_COOKIE_SECURE=true."
+      f"{option_name} uses a '__Host-' prefix and therefore requires human_cookie_secure=true."
     )
 
   return value
@@ -549,6 +566,7 @@ class LocalizedHtml:
 
 def _read_footer_html(config_source: ConfigSource, name: str) -> LocalizedHtml:
   """Read trusted footer HTML from a string or a locale-keyed TOML mapping."""
+  option_name = config_option_label(name)
   raw_value = config_source.get(name)
   if raw_value is None:
     return LocalizedHtml()
@@ -561,12 +579,12 @@ def _read_footer_html(config_source: ConfigSource, name: str) -> LocalizedHtml:
     for raw_locale, raw_html in raw_value.items():
       if not isinstance(raw_locale, str) or not isinstance(raw_html, str):
         raise RuntimeError(
-          f"{name} must contain only string locale keys and string HTML values."
+          f"{option_name} must contain only string locale keys and string HTML values."
         )
 
       locale = normalize_locale_name(raw_locale)
       if not locale:
-        raise RuntimeError(f"{name} must not contain blank locale keys.")
+        raise RuntimeError(f"{option_name} must not contain blank locale keys.")
 
       html_value = raw_html.strip()
       if html_value:
@@ -574,7 +592,7 @@ def _read_footer_html(config_source: ConfigSource, name: str) -> LocalizedHtml:
 
     return LocalizedHtml(translations=tuple(localized_values.items()))
 
-  raise RuntimeError(f"{name} must be a string or TOML table of strings.")
+  raise RuntimeError(f"{option_name} must be a string or TOML table of strings.")
 
 
 def _merge_footer_html_values(base_value: Any, override_value: Any) -> Any:
@@ -626,6 +644,7 @@ class SkipRouteRule:
 
 def _parse_skip_route_rule(value: str, name: str) -> SkipRouteRule:
   """Parse one skip_routes entry in oauth2-proxy-compatible METHOD=REGEX form."""
+  option_name = config_option_label(name)
   rule_text = value.strip()
   method: str | None = None
   pattern = rule_text
@@ -637,13 +656,15 @@ def _parse_skip_route_rule(value: str, name: str) -> SkipRouteRule:
     pattern = pattern_candidate.strip()
     if not pattern:
       raise RuntimeError(
-        f"{name} contains a method-specific rule without a regex pattern."
+        f"{option_name} contains a method-specific rule without a regex pattern."
       )
 
   try:
     compiled_pattern = re.compile(pattern)
   except re.error as exc:
-    raise RuntimeError(f"{name} contains an invalid regex '{pattern}': {exc}.") from exc
+    raise RuntimeError(
+      f"{option_name} contains an invalid regex '{pattern}': {exc}."
+    ) from exc
 
   return SkipRouteRule(pattern=pattern, method=method, regex=compiled_pattern)
 
@@ -672,13 +693,16 @@ def _read_bypass_user_agents(
   config_source: ConfigSource, name: str
 ) -> tuple[UserAgentBypassRule, ...]:
   """Read regex-based user-agent bypass rules from env vars or TOML arrays."""
+  option_name = config_option_label(name)
   values = _read_csv_values(config_source, name)
   rules: list[UserAgentBypassRule] = []
   for value in values:
     try:
       compiled_pattern = re.compile(value)
     except re.error as exc:
-      raise RuntimeError(f"{name} contains an invalid regex '{value}': {exc}.") from exc
+      raise RuntimeError(
+        f"{option_name} contains an invalid regex '{value}': {exc}."
+      ) from exc
     rules.append(UserAgentBypassRule(pattern=value, regex=compiled_pattern))
   return tuple(rules)
 
@@ -695,13 +719,16 @@ def _read_bypass_ips(
   config_source: ConfigSource, name: str
 ) -> tuple[IpBypassRule, ...]:
   """Read bypass IPs or CIDRs from env vars or TOML arrays."""
+  option_name = config_option_label(name)
   values = _read_csv_values(config_source, name)
   rules: list[IpBypassRule] = []
   for value in values:
     try:
       network = ip_network(value, strict=False)
     except ValueError as exc:
-      raise RuntimeError(f"{name} contains an invalid IP or CIDR '{value}'.") from exc
+      raise RuntimeError(
+        f"{option_name} contains an invalid IP or CIDR '{value}'."
+      ) from exc
     rules.append(IpBypassRule(value=value, network=network))
   return tuple(rules)
 
@@ -716,19 +743,22 @@ class HeaderBypassRule:
 
 def _parse_bypass_header_rule(value: str, name: str) -> HeaderBypassRule:
   """Parse one header-based bypass rule in HEADER=VALUE form."""
+  option_name = config_option_label(name)
   header_name, separator, header_value = value.partition("=")
   normalized_name = header_name.strip()
   normalized_value = header_value.strip()
 
   if not separator or not normalized_name or not normalized_value:
-    raise RuntimeError(f"{name} entries must use non-empty HEADER=VALUE pairs.")
+    raise RuntimeError(f"{option_name} entries must use non-empty HEADER=VALUE pairs.")
 
   if not HEADER_NAME_PATTERN.fullmatch(normalized_name):
-    raise RuntimeError(f"{name} contains an invalid header name '{normalized_name}'.")
+    raise RuntimeError(
+      f"{option_name} contains an invalid header name '{normalized_name}'."
+    )
 
   if len(normalized_value) < MIN_BYPASS_HEADER_TOKEN_LENGTH:
     raise RuntimeError(
-      f"{name} token values must be at least {MIN_BYPASS_HEADER_TOKEN_LENGTH} characters long."
+      f"{option_name} token values must be at least {MIN_BYPASS_HEADER_TOKEN_LENGTH} characters long."
     )
 
   return HeaderBypassRule(

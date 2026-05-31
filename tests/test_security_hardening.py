@@ -47,7 +47,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       return create_app()
 
   def test_cap_mode_requires_secure_cookie_without_local_override(self):
-    with self.assertRaisesRegex(RuntimeError, "ALLOW_INSECURE_LOCAL_CAP"):
+    with self.assertRaisesRegex(RuntimeError, "allow_insecure_local_cap"):
       self._create_app(
         CRYKEEPER_VERIFICATION_MODE="cap",
         CRYKEEPER_HUMAN_COOKIE_SECURE="false",
@@ -78,7 +78,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       },
       clear=True,
     ):
-      with self.assertRaisesRegex(RuntimeError, "TRUSTED_PROXY_CIDRS"):
+      with self.assertRaisesRegex(RuntimeError, "trusted_proxy_cidrs"):
         create_app()
 
   def test_create_app_rejects_unknown_enforcement_mode(self):
@@ -91,7 +91,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       },
       clear=True,
     ):
-      with self.assertRaisesRegex(RuntimeError, "ENFORCEMENT_MODE"):
+      with self.assertRaisesRegex(RuntimeError, "enforcement_mode"):
         create_app()
 
   def test_cap_mode_allows_explicit_local_http_override(self):

@@ -26,7 +26,7 @@ def create_app() -> Flask:
 
   if settings.rate_limit_backend not in {"auto", "memory", "valkey"}:
     raise RuntimeError(
-      "CRYKEEPER_RATE_LIMIT_BACKEND must be one of 'auto', 'memory', or 'valkey'."
+      "rate_limit_backend must be one of 'auto', 'memory', or 'valkey'."
     )
 
   for context_label, effective_settings in _iter_configured_settings(settings_bundle):
@@ -84,7 +84,7 @@ def create_app() -> Flask:
   if settings.real_captcha_enabled and not settings.cookie_secure:
     if not settings.allow_insecure_local_cap:
       raise RuntimeError(
-        "Real captcha verification modes require CRYKEEPER_HUMAN_COOKIE_SECURE=true unless CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP=true is set for local-only HTTP testing."
+        "Real captcha verification modes require human_cookie_secure=true unless allow_insecure_local_cap=true is set for local-only HTTP testing."
       )
 
   if settings.cookie_secure and not settings.host_cookie_enabled:
@@ -116,57 +116,57 @@ def _validate_effective_settings(
 
   if settings.verification_mode not in {"dummy", "cap", "hcaptcha", "altcha"}:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_VERIFICATION_MODE must be one of 'dummy', 'cap', 'hcaptcha', or 'altcha'."
+      f"{prefix}verification_mode must be one of 'dummy', 'cap', 'hcaptcha', or 'altcha'."
     )
 
   if settings.enforcement_mode not in ENFORCEMENT_MODES:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_ENFORCEMENT_MODE must be one of 'enforce', 'log_only', or 'challenge_passthrough'."
+      f"{prefix}enforcement_mode must be one of 'enforce', 'log_only', or 'challenge_passthrough'."
     )
 
   if settings.cookie_binding_mode not in {"none", "user-agent", "ip-user-agent"}:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_HUMAN_COOKIE_BINDING must be one of 'none', 'user-agent', or 'ip-user-agent'."
+      f"{prefix}human_cookie_binding must be one of 'none', 'user-agent', or 'ip-user-agent'."
     )
 
   if settings.secret_key in {"change-me-in-production", "dev-secret-change-me"}:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_SECRET_KEY is still using the development default. Configure a unique secret before startup."
+      f"{prefix}secret_key is still using the development default. Configure a unique secret before startup."
     )
 
   if settings.trusted_proxy_hops > 0 and not settings.trusted_proxy_cidrs:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_TRUSTED_PROXY_HOPS requires a non-empty CRYKEEPER_TRUSTED_PROXY_CIDRS so forwarded headers are accepted only from trusted proxy networks."
+      f"{prefix}trusted_proxy_hops requires a non-empty trusted_proxy_cidrs so forwarded headers are accepted only from trusted proxy networks."
     )
 
   if settings.cap_enabled and not settings.cap_configured:
     raise RuntimeError(
-      f"{prefix}CAP mode requires CRYKEEPER_CAP_PUBLIC_BASE_URL, CRYKEEPER_CAP_SITE_KEY, "
-      "and CRYKEEPER_CAP_SECRET_KEY to be set. CRYKEEPER_CAP_INTERNAL_BASE_URL is optional "
+      f"{prefix}CAP mode requires cap_public_base_url, cap_site_key, "
+      "and cap_secret_key to be set. cap_internal_base_url is optional "
       "and falls back to the public URL."
     )
 
   if settings.hcaptcha_enabled and not settings.hcaptcha_configured:
     raise RuntimeError(
-      f"{prefix}hCaptcha mode requires CRYKEEPER_HCAPTCHA_SITE_KEY and "
-      "CRYKEEPER_HCAPTCHA_SECRET_KEY. CRYKEEPER_HCAPTCHA_SCRIPT_URL and "
-      "CRYKEEPER_HCAPTCHA_VERIFY_URL default to the official hCaptcha endpoints."
+      f"{prefix}hCaptcha mode requires hcaptcha_site_key and "
+      "hcaptcha_secret_key. hcaptcha_script_url and "
+      "hcaptcha_verify_url default to the official hCaptcha endpoints."
     )
 
   if settings.altcha_enabled and not settings.altcha_configured:
     raise RuntimeError(
-      f"{prefix}ALTCHA mode requires CRYKEEPER_ALTCHA_HMAC_SECRET. "
-      "CRYKEEPER_ALTCHA_SCRIPT_URL is optional and otherwise defaults to the bundled crykeeper widget script."
+      f"{prefix}ALTCHA mode requires altcha_hmac_secret. "
+      "altcha_script_url is optional and otherwise defaults to the bundled crykeeper widget script."
     )
 
   if settings.altcha_enabled and settings.altcha_challenge_cost < 1:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_ALTCHA_CHALLENGE_COST must be greater than 0 in ALTCHA mode."
+      f"{prefix}altcha_challenge_cost must be greater than 0 in ALTCHA mode."
     )
 
   if settings.altcha_enabled and settings.altcha_expires_seconds < 1:
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_ALTCHA_EXPIRES_SECONDS must be greater than 0 in ALTCHA mode."
+      f"{prefix}altcha_expires_seconds must be greater than 0 in ALTCHA mode."
     )
 
   if (
@@ -174,7 +174,7 @@ def _validate_effective_settings(
     and not default_settings.rate_limit_valkey_url
   ):
     raise RuntimeError(
-      f"{prefix}CRYKEEPER_RATE_LIMIT_BACKEND=valkey requires a non-empty CRYKEEPER_RATE_LIMIT_VALKEY_URL "
+      f"{prefix}rate_limit_backend=valkey requires a non-empty rate_limit_valkey_url "
       "or shared rate_limit_valkey_url under [crykeeper]."
     )
 
@@ -184,8 +184,8 @@ def _validate_effective_settings(
     and not settings.allow_insecure_local_cap
   ):
     raise RuntimeError(
-      f"{prefix}Real captcha verification modes require CRYKEEPER_HUMAN_COOKIE_SECURE=true unless "
-      "CRYKEEPER_ALLOW_INSECURE_LOCAL_CAP=true is set for local-only HTTP testing."
+      f"{prefix}Real captcha verification modes require human_cookie_secure=true unless "
+      "allow_insecure_local_cap=true is set for local-only HTTP testing."
     )
 
 
