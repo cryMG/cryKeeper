@@ -383,9 +383,14 @@ verification_mode = "dummy"
 path_prefix = "/dummy-check"
 footer_html.en = 'Dummy demo powered by <strong>cryMG</strong>'
 footer_html.de = 'Dummy-Demo powered by <strong>cryMG</strong>'
+# set bypass_headers and disable rate limits here as this dummy demo is used by
+# the benchmark script to measure auth_request latency without needing to solve
+# a challenge first
 bypass_headers = [
   "X-CryKeeper-Token=0123456789abcdef0123456789abcdef"
 ]
+challenge_rate_limit_requests=0
+verify_rate_limit_requests=0
 
 [[website]]
 domains = ["full.localhost"]
