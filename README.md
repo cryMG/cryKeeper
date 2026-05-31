@@ -424,6 +424,8 @@ Translation catalogs are discovered at startup, so restart the container after a
 
 For local end-to-end testing, use the checked-in [docker-compose.yml](docker-compose.yml). It builds cryKeeper from the current source tree and starts nginx, the demo backend, a local CAP container, and Valkey.
 
+*Note:* Check the `config.toml` file after copying it from the example. The example configuration uses placeholder Cap keys, which are not valid for a real Cap instance. You need to replace them with real keys from your local Cap deployment for the demo to work as intended. Also you need to enable the hCaptcha test keys as described in the config if you want to test the hCaptcha demo.
+
 ```bash
 cp config.example.toml config.toml
 # optional: cp .env.example .env
@@ -478,7 +480,7 @@ The repository also includes [scripts/benchmark_auth_request.py](scripts/benchma
 - a protected response that falls through to the challenge page
 - a protected response with a real verification cookie minted through Dummy mode
 - a protected `skip_routes` hit
-- an optional protected header-bypass hit when your local config defines `X-CryKeeper-Token=...` or `X-Bypass-Token=...`
+- an optional protected header-bypass hit when your local config defines `X-CryKeeper-Token=...`
 
 Example:
 
