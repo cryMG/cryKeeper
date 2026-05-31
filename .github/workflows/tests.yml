@@ -49,6 +49,29 @@ jobs:
       - name: Run Ruff
         run: ruff check .
 
+  assets:
+    name: Python Asset Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install asset build dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run asset build
+        run: python scripts/build_static_assets.py
+
+      - name: Validate asset manifest
+        run: test -s build/static-dist/asset-manifest.json
+
   security:
     name: Bandit
     runs-on: ubuntu-latest

@@ -204,7 +204,7 @@ Every configured `path_prefix` exposes the same set of cryKeeper endpoints. With
 - `GET <path_prefix>/altcha/challenge`: provider-specific ALTCHA challenge endpoint. Returns a fresh signed ALTCHA challenge as JSON and applies the same secure-transport and challenge rate-limit checks as the HTML challenge page.
 - `GET <path_prefix>/clear`: removes the verification cookie and redirects to the validated local `return` path, falling back to `/` if the parameter is missing or invalid.
 - `GET <path_prefix>/healthz`: minimal liveness endpoint for container and reverse-proxy health checks. Returns `200 OK` with the body `ok`.
-- `GET <path_prefix>/static/*`: static assets for the challenge page and verification flows, including the bundled vendor files.
+- `GET <path_prefix>/static/*`: static assets for the challenge page and verification flows, including the bundled vendor files. In the published Docker image, cryKeeper build-minifies its local JS and CSS entry assets into content-hashed filenames and resolves them through an internal manifest at render time; those manifest-backed hashed assets are served with a public 14-day cache header, while source checkouts without that manifest keep serving the plain source filenames.
 
 In deployments with `[[website]]` overrides, the same endpoint set is also exposed below each additional configured `path_prefix`.
 
@@ -486,6 +486,8 @@ The project idea, architecture, implementation decisions, testing, review and re
 ### Bundled Third-Party Asset
 
 cryKeeper vendors the ALTCHA browser bundle at `app/static/vendor/altcha.min.js` so ALTCHA mode works without a mandatory external CDN dependency.
+
+The Docker image also runs a Python-only asset build step that minifies cryKeeper's own local JS and CSS entry files into hashed filenames plus `asset-manifest.json`. Flask uses that manifest when it is present, while repo-local source runs keep a no-manifest fallback to the original filenames. The checked-in demo nginx config also enables gzip for compressible responses.
 
 - Upstream project: [ALTCHA](https://github.com/altcha-org/altcha)
 - Bundled artifact: file `dist/main/altcha.min.js`

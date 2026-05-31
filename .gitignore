@@ -3,5 +3,7 @@
 __pycache__/
 *.pyc
 config.toml
+app/static-dist/
+build/
 nginx/certs/*
 !nginx/certs/.gitkeep

@@ -7,7 +7,7 @@ Thank you for your interest in contributing to cryKeeper! We welcome contributio
 Python package files:
 
 - [requirements.txt](requirements.txt) contains the runtime dependencies
-- [requirements-dev.txt](requirements-dev.txt) extends it with development tools such as Ruff and Bandit
+- [requirements-dev.txt](requirements-dev.txt) extends it with development tools such as Ruff, Bandit, and the Python minifiers used by the hashed static-asset build step
 
 The following developer commands assume a local virtual environment with the dev dependencies installed:
 
@@ -31,6 +31,16 @@ docker build \
   --build-arg VCS_REF="$(git rev-parse HEAD)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   -t crykeeper:latest .
+```
+
+## CSS/JS Minification and Hashing
+
+The static CSS/JS assets are minified and hashed for cache busting. This happens automatically during the Docker build, but you can also run the build script locally if you want to inspect the output or test changes to the static files without rebuilding the entire Docker image.
+
+To create the minified assets outside Docker, run:
+
+```bash
+python scripts/build_static_assets.py
 ```
 
 ## Local Python Tests

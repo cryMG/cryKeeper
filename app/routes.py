@@ -16,6 +16,7 @@ from flask import (
   request,
 )
 
+from .assets import hashed_asset_cache_control, resolved_asset_name
 from .captcha.altcha import create_challenge as create_altcha_challenge
 from .captcha.altcha import verify_request as verify_altcha_request
 from .captcha.cap import CapVerificationResult
@@ -41,6 +42,19 @@ from .security import normalize_return_path
 crykeeper = Blueprint(
   "crykeeper", __name__, static_folder="static", static_url_path="/static"
 )
+
+
+@crykeeper.after_request
+def _apply_hashed_asset_cache_headers(response: Response) -> Response:
+  """Cache build-time hashed static assets aggressively without touching HTML flows."""
+  if not (request.endpoint or "").endswith(".static"):
+    return response
+
+  cache_control = hashed_asset_cache_control((request.view_args or {}).get("filename"))
+  if cache_control is not None:
+    response.headers["Cache-Control"] = cache_control
+  return response
+
 
 KNOWN_SEARCH_ENGINE_USER_AGENTS = (
   (
@@ -413,9 +427,9 @@ def _render_challenge(
       rate_limited=rate_limited,
       verification_mode=settings.verification_mode,
       verify_action_url=_crykeeper_path(settings, "/verify"),
-      challenge_shared_style_url=_crykeeper_path(settings, "/static/ui.css"),
-      challenge_shared_script_url=_crykeeper_path(
-        settings, "/static/challenge-common.js"
+      challenge_shared_style_url=_crykeeper_static_path(settings, "ui.css"),
+      challenge_shared_script_url=_crykeeper_static_path(
+        settings, "challenge-common.js"
       ),
       challenge_runtime_script_url=challenge_context["runtime_script_url"],
       provider_external_scripts=challenge_context["external_scripts"],
@@ -447,13 +461,11 @@ def _render_return_page(return_path: str, settings: object) -> Response:
       translations=translations,
       footer_html=_challenge_footer_html(settings, language_code),
       return_path=return_path,
-      challenge_shared_style_url=_crykeeper_path(settings, "/static/ui.css"),
-      challenge_shared_script_url=_crykeeper_path(
-        settings, "/static/challenge-common.js"
+      challenge_shared_style_url=_crykeeper_static_path(settings, "ui.css"),
+      challenge_shared_script_url=_crykeeper_static_path(
+        settings, "challenge-common.js"
       ),
-      verify_redirect_script_url=_crykeeper_path(
-        settings, "/static/verify-redirect.js"
-      ),
+      verify_redirect_script_url=_crykeeper_static_path(settings, "verify-redirect.js"),
     ),
     HTTPStatus.OK,
   )
@@ -1009,7 +1021,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_retry_ready",
         "status_reload_ready",
       ),
-      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-cap.js"),
+      "runtime_script_url": _crykeeper_static_path(settings, "challenge-cap.js"),
       "external_scripts": (
         {
           "src": settings.cap_widget_script_url,
@@ -1037,7 +1049,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_retry_ready",
         "status_reload_ready",
       ),
-      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-hcaptcha.js"),
+      "runtime_script_url": _crykeeper_static_path(settings, "challenge-hcaptcha.js"),
       "external_scripts": (
         {
           "src": settings.hcaptcha_script_url,
@@ -1063,7 +1075,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
         "status_altcha_ready",
         "status_retry_ready",
       ),
-      "runtime_script_url": _crykeeper_path(settings, "/static/challenge-altcha.js"),
+      "runtime_script_url": _crykeeper_static_path(settings, "challenge-altcha.js"),
       "external_scripts": (
         {
           "src": altcha_script_url,
@@ -1084,7 +1096,7 @@ def _challenge_template_context(settings: object) -> dict[str, object]:
       "dummy_progress_running",
       "progress_complete",
     ),
-    "runtime_script_url": _crykeeper_path(settings, "/static/challenge-dummy.js"),
+    "runtime_script_url": _crykeeper_static_path(settings, "challenge-dummy.js"),
     "external_scripts": (),
     "provider_options": {},
     "provider_template": "providers/dummy.html",
@@ -1140,6 +1152,11 @@ def _json_error_response(
 def _crykeeper_path(settings: object, suffix: str) -> str:
   """Build a crykeeper-local URL path from the effective per-website prefix."""
   return f"{settings.path_prefix}{suffix}"
+
+
+def _crykeeper_static_path(settings: object, logical_name: str) -> str:
+  """Build one cryKeeper-local static asset URL using the optional asset manifest."""
+  return _crykeeper_path(settings, f"/static/{resolved_asset_name(logical_name)}")
 
 
 def _crykeeper_url(settings: object, suffix: str, return_path: str) -> str:

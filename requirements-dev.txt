@@ -3,5 +3,7 @@
 
 -r requirements.txt
 
+rcssmin==1.2.2
+rjsmin==1.2.5
 ruff>=0.15.14,<1.0
 bandit>=1.9.4,<2.0

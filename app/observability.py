@@ -10,6 +10,8 @@ from flask import (
   make_response,
   redirect,
   render_template,
+  request,
+  url_for,
 )
 from prometheus_client import (
   CONTENT_TYPE_LATEST,
@@ -20,6 +22,7 @@ from prometheus_client import (
 )
 from prometheus_client.multiprocess import MultiProcessCollector
 
+from .assets import hashed_asset_cache_control, resolved_asset_name
 from .config import DEFAULT_FOOTER_HTML, INTERNAL_OBSERVABILITY_PATH
 
 CRYKEEPER_PROMETHEUS_DIR_ENV = "CRYKEEPER_PROMETHEUS_MULTIPROC_DIR"
@@ -34,6 +37,18 @@ observability = Blueprint(
   static_folder="static",
   static_url_path="/static",
 )
+
+
+@observability.after_request
+def _apply_hashed_asset_cache_headers(response: Response) -> Response:
+  """Cache build-time hashed observability assets aggressively without caching HTML."""
+  if request.endpoint != "crykeeper_observability.static":
+    return response
+
+  cache_control = hashed_asset_cache_control((request.view_args or {}).get("filename"))
+  if cache_control is not None:
+    response.headers["Cache-Control"] = cache_control
+  return response
 
 
 class CryKeeperObservability:
@@ -305,7 +320,10 @@ def dashboard() -> Response:
   response = make_response(
     render_template(
       "dashboard.html",
+      dashboard_script_url=_observability_static_url("dashboard.js"),
+      dashboard_style_url=_observability_static_url("dashboard.css"),
       footer_html=DEFAULT_FOOTER_HTML,
+      shared_style_url=_observability_static_url("ui.css"),
       snapshot=snapshot,
     )
   )
@@ -333,6 +351,14 @@ def _with_observability_headers(
   if content_type is not None:
     response.headers["Content-Type"] = content_type
   return response
+
+
+def _observability_static_url(logical_name: str) -> str:
+  """Build one observability static asset URL using the optional asset manifest."""
+  return url_for(
+    "crykeeper_observability.static",
+    filename=resolved_asset_name(logical_name),
+  )
 
 
 def _configure_prometheus_directory() -> str | None:

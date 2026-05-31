@@ -1,3 +1,21 @@
+###################
+# Build stage for static assets
+###################
+FROM python:3.14-slim AS asset-builder
+
+WORKDIR /build
+
+COPY requirements.txt requirements-dev.txt /tmp/
+RUN pip install -r /tmp/requirements-dev.txt
+
+COPY app/static ./app/static
+COPY scripts ./scripts
+
+RUN python /build/scripts/build_static_assets.py /build/app/static /build/static-dist
+
+###################
+# Final image
+###################
 FROM python:3.14-slim
 
 ARG VERSION=dev
@@ -35,6 +53,7 @@ WORKDIR /app
 COPY requirements.txt /tmp/requirements.txt
 COPY app ./app
 COPY entrypoint.sh gunicorn.conf.py wsgi.py ./
+COPY --from=asset-builder /build/static-dist/ ./app/static/
 
 RUN pip install -r /tmp/requirements.txt \
     && rm /tmp/requirements.txt \

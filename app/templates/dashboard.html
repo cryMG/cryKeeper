@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>cryKeeper Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('crykeeper_observability.static', filename='ui.css') }}">
-    <link rel="stylesheet" href="{{ url_for('crykeeper_observability.static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ shared_style_url }}">
+    <link rel="stylesheet" href="{{ dashboard_style_url }}">
   </head>
   <body>
     <main
@@ -219,6 +219,6 @@
     <footer>
       <p>{{ footer_html | safe }}</p>
     </footer>
-    <script src="{{ url_for('crykeeper_observability.static', filename='dashboard.js') }}" defer></script>
+    <script src="{{ dashboard_script_url }}" defer></script>
   </body>
 </html>
