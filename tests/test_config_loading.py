@@ -21,6 +21,7 @@ class ConfigLoadingTests(unittest.TestCase):
         """
                 [crykeeper]
                 secret_key = "file-secret"
+                previous_secret_keys = ["older-file-secret", "old-file-secret", "file-secret"]
                 human_cookie_name = "__Host-file-cookie"
                 human_cookie_ttl_seconds = 123
                 human_cookie_secure = true
@@ -74,6 +75,13 @@ class ConfigLoadingTests(unittest.TestCase):
         settings = load_settings()
 
     self.assertEqual("file-secret", settings.secret_key)
+    self.assertEqual(
+      ("older-file-secret", "old-file-secret"), settings.previous_secret_keys
+    )
+    self.assertEqual(
+      ("file-secret", "older-file-secret", "old-file-secret"),
+      settings.all_secret_keys,
+    )
     self.assertEqual("__Host-file-cookie", settings.cookie_name)
     self.assertEqual(123, settings.cookie_ttl_seconds)
     self.assertTrue(settings.cookie_secure)
@@ -167,6 +175,7 @@ class ConfigLoadingTests(unittest.TestCase):
         """
                 [crykeeper]
                 secret_key = "file-secret"
+                previous_secret_keys = ["from-file-old-secret"]
                 human_cookie_ttl_seconds = 321
                 human_cookie_secure = true
                 enforcement_mode = "challenge_passthrough"
@@ -188,6 +197,7 @@ class ConfigLoadingTests(unittest.TestCase):
         {
           "CRYKEEPER_CONFIG_FILE": config_path,
           "CRYKEEPER_SECRET_KEY": "env-secret",
+          "CRYKEEPER_PREVIOUS_SECRET_KEYS": "older-env-secret, old-env-secret, env-secret",
           "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
           "CRYKEEPER_ENFORCEMENT_MODE": "enforce",
           "CRYKEEPER_FOOTER_HTML": "from <strong>env</strong>",
@@ -206,6 +216,9 @@ class ConfigLoadingTests(unittest.TestCase):
         settings = load_settings()
 
     self.assertEqual("env-secret", settings.secret_key)
+    self.assertEqual(
+      ("older-env-secret", "old-env-secret"), settings.previous_secret_keys
+    )
     self.assertEqual(321, settings.cookie_ttl_seconds)
     self.assertFalse(settings.cookie_secure)
     self.assertEqual("enforce", settings.enforcement_mode)
@@ -242,6 +255,7 @@ class ConfigLoadingTests(unittest.TestCase):
         """
                 [crykeeper]
                 secret_key = "file-secret"
+                previous_secret_keys = ["old-file-secret"]
                 human_cookie_secure = true
                 enforcement_mode = "log_only"
                 footer_html = "from file"
@@ -278,6 +292,7 @@ class ConfigLoadingTests(unittest.TestCase):
         settings = load_settings()
 
     self.assertEqual("file-secret", settings.secret_key)
+    self.assertEqual(("old-file-secret",), settings.previous_secret_keys)
     self.assertTrue(settings.cookie_secure)
     self.assertEqual("from file", settings.footer_html.resolve("fr"))
     self.assertEqual(
@@ -339,6 +354,7 @@ class ConfigLoadingTests(unittest.TestCase):
         """
                 [crykeeper]
                 secret_key = "file-secret"
+                previous_secret_keys = ["default-old-secret"]
                 path_prefix = "/from-file"
                 footer_html = { en = 'default footer', de = 'standardfuss' }
                 skip_routes = ["^/shared/"]
@@ -347,6 +363,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 [[website]]
                 domains = ["one.example.com", "TWO.example.com:443"]
                 secret_key = "website-secret"
+                previous_secret_keys = ["website-old-secret", "default-old-secret"]
                 human_cookie_secure = false
                 footer_html = { de = '<a href="/legal">website footer</a>' }
                 skip_routes = ["POST=^/site-api/", "GET=^/site-assets/"]
@@ -369,6 +386,10 @@ class ConfigLoadingTests(unittest.TestCase):
         settings_bundle = load_settings_bundle()
 
     self.assertEqual("env-secret", settings_bundle.default_settings.secret_key)
+    self.assertEqual(
+      ("default-old-secret",),
+      settings_bundle.default_settings.previous_secret_keys,
+    )
     self.assertTrue(settings_bundle.default_settings.cookie_secure)
     self.assertEqual(
       "__Host-crykeeper_verified", settings_bundle.default_settings.cookie_name
@@ -380,6 +401,10 @@ class ConfigLoadingTests(unittest.TestCase):
     fallback_settings = settings_bundle.settings_for_host("missing.example.com")
 
     self.assertEqual("website-secret", site_settings.secret_key)
+    self.assertEqual(
+      ("website-old-secret", "default-old-secret"),
+      site_settings.previous_secret_keys,
+    )
     self.assertFalse(site_settings.cookie_secure)
     self.assertEqual("crykeeper_verified", site_settings.cookie_name)
     self.assertTrue(settings_bundle.default_settings.anonymize_client_ip_logs)

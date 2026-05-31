@@ -276,6 +276,10 @@ export CRYKEEPER_TRUSTED_PROXY_CIDRS=172.16.0.0/12
 
 Non-empty environment variables override only the shared defaults. They do not create or override individual `[[website]]` entries.
 
+### Secret Key Rotation
+
+To rotate the cookie signing key, set a new `secret_key` and keep the retired value in `previous_secret_keys` or `CRYKEEPER_PREVIOUS_SECRET_KEYS` for as long as old cookies may still exist. New cookies are always signed with `secret_key`; the previous keys are verify-only. Remove retired keys after at least the longest effective `human_cookie_ttl_seconds` has elapsed.
+
 ### Logging Privacy
 
 Anonymized client-IP logging is enabled by default. Keep `anonymize_client_ip_logs = true` or `CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS=true` when cryKeeper's own application logs must not contain full client IPs. When enabled, the `client_ip` log field is reduced to an anonymized network prefix such as `203.0.113.0/24` or `2001:db8:abcd::/48`.
@@ -361,6 +365,7 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 ## Production Checklist
 
 - Set a long random value for `secret_key` or `CRYKEEPER_SECRET_KEY`; cryKeeper refuses to start with the published placeholder default
+- When rotating `secret_key`, keep retired values in `previous_secret_keys` or `CRYKEEPER_PREVIOUS_SECRET_KEYS` until the longest active cookie TTL has elapsed, then remove them
 - Serve cryKeeper behind HTTPS and set `human_cookie_secure = true` in production
 - Keep `enforcement_mode = "enforce"` outside planned validation windows, because both rollout modes intentionally allow access that would otherwise be challenged
 - Keep the reverse proxy prefix aligned with `path_prefix`

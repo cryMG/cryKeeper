@@ -107,7 +107,7 @@ def check() -> tuple[str, int] | Response:
 
   token = request.cookies.get(settings.cookie_name)
   payload = verify_token_for_client(
-    settings.secret_key,
+    settings.all_secret_keys,
     token,
     client_binding=_client_binding_value(settings.cookie_binding_mode),
     allowed_subjects=_check_allowed_token_subjects(settings),

@@ -37,6 +37,7 @@ CONFIG_TABLE_NAME = "crykeeper"
 WEBSITE_TABLE_NAME = "website"
 CONFIGURABLE_ENV_SUFFIXES = (
   "SECRET_KEY",
+  "PREVIOUS_SECRET_KEYS",
   "HUMAN_COOKIE_NAME",
   "HUMAN_COOKIE_TTL_SECONDS",
   "HUMAN_COOKIE_SECURE",
@@ -780,6 +781,7 @@ class Settings:
   """Effective runtime settings derived from defaults, TOML, and env vars."""
 
   secret_key: str
+  previous_secret_keys: tuple[str, ...]
   cookie_name: str
   cookie_ttl_seconds: int
   cookie_secure: bool
@@ -831,6 +833,12 @@ class Settings:
   @property
   def host_cookie_enabled(self) -> bool:
     return self.cookie_name.startswith("__Host-")
+
+  @property
+  def all_secret_keys(self) -> tuple[str, ...]:
+    ordered_keys = [self.secret_key]
+    ordered_keys.extend(self.previous_secret_keys)
+    return tuple(dict.fromkeys(ordered_keys))
 
   @property
   def cap_enabled(self) -> bool:
@@ -937,6 +945,9 @@ class SettingsBundle:
 def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
   """Normalize one effective configuration layer into runtime settings."""
   config_source = ConfigSource(file_values=values)
+  secret_key = _read_text(
+    config_source, _env_name("SECRET_KEY"), "change-me-in-production"
+  )
   cap_public_base_url = _read_base_url(
     config_source, _env_name("CAP_PUBLIC_BASE_URL"), ""
   )
@@ -981,8 +992,13 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
   )
   cookie_secure = _read_bool(config_source, _env_name("HUMAN_COOKIE_SECURE"), False)
   return Settings(
-    secret_key=_read_text(
-      config_source, _env_name("SECRET_KEY"), "change-me-in-production"
+    secret_key=secret_key,
+    previous_secret_keys=tuple(
+      candidate_key
+      for candidate_key in dict.fromkeys(
+        _read_csv_values(config_source, _env_name("PREVIOUS_SECRET_KEYS"))
+      )
+      if candidate_key != secret_key
     ),
     cookie_name=_read_cookie_name(
       config_source, _env_name("HUMAN_COOKIE_NAME"), cookie_secure

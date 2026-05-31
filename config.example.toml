@@ -25,6 +25,13 @@
 # start while this placeholder value is still configured.
 secret_key = "change-me-in-production"
 
+# Optional previous HMAC keys accepted only for cookie verification.
+#
+# Use this during key rotation so cookies signed with the retired key keep
+# working until they expire. New cookies are always signed with secret_key.
+# Remove old keys after the longest effective cookie TTL has elapsed.
+previous_secret_keys = []
+
 # Name of the signed cookie written after successful verification.
 #
 # Leave this on crykeeper_verified unless you need a different cookie name for
@@ -361,6 +368,7 @@ domains = ["cap.localhost"]
 path_prefix = "/cap-check"
 footer_html.en = 'Cap demo powered by <strong>cryMG</strong>'
 footer_html.de = 'Cap-Demo powered by <strong>cryMG</strong>'
+# previous_secret_keys = ["older-cap-secret-key"]
 cap_site_key = "other-cap-site-key"
 cap_secret_key = "other-cap-secret-key"
 # skip_routes = ["GET=^/assets/", "POST=^/api/"]

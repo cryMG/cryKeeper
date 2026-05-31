@@ -56,7 +56,7 @@ def issue_token_for_client(
 
 
 def verify_token(
-  secret_key: str,
+  secret_key: str | tuple[str, ...],
   token: str | None,
   allowed_subjects: tuple[str, ...] = (TOKEN_SUBJECT_HUMAN,),
 ) -> dict[str, Any] | None:
@@ -69,7 +69,7 @@ def verify_token(
 
 
 def verify_token_for_client(
-  secret_key: str,
+  secret_key: str | tuple[str, ...],
   token: str | None,
   client_binding: str | None = None,
   allowed_subjects: tuple[str, ...] = (TOKEN_SUBJECT_HUMAN,),
@@ -77,6 +77,27 @@ def verify_token_for_client(
   """Validate signature, expiry, and optional client binding for the cookie."""
   if not token:
     return None
+
+  for candidate_secret_key in _verify_secret_keys(secret_key):
+    payload = _verify_token_for_client_with_secret_key(
+      candidate_secret_key,
+      token,
+      client_binding=client_binding,
+      allowed_subjects=allowed_subjects,
+    )
+    if payload is not None:
+      return payload
+
+  return None
+
+
+def _verify_token_for_client_with_secret_key(
+  secret_key: str,
+  token: str,
+  client_binding: str | None = None,
+  allowed_subjects: tuple[str, ...] = (TOKEN_SUBJECT_HUMAN,),
+) -> dict[str, Any] | None:
+  """Validate one cookie against a single candidate secret key."""
 
   try:
     payload_b64, signature_b64 = token.split(".", 1)
@@ -117,6 +138,13 @@ def verify_token_for_client(
     return None
 
   return payload
+
+
+def _verify_secret_keys(secret_key: str | tuple[str, ...]) -> tuple[str, ...]:
+  """Normalize the configured key rotation set to an ordered tuple."""
+  if isinstance(secret_key, str):
+    return (secret_key,)
+  return secret_key
 
 
 def _client_binding_digest(secret_key: str, client_binding: str) -> str:
