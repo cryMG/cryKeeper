@@ -383,6 +383,9 @@ verification_mode = "dummy"
 path_prefix = "/dummy-check"
 footer_html.en = 'Dummy demo powered by <strong>cryMG</strong>'
 footer_html.de = 'Dummy-Demo powered by <strong>cryMG</strong>'
+bypass_headers = [
+  "X-CryKeeper-Token=0123456789abcdef0123456789abcdef"
+]
 
 [[website]]
 domains = ["full.localhost"]

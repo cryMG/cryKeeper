@@ -162,6 +162,8 @@ location = /_crykeeper_check {
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Original-Method $request_method;
   proxy_set_header X-Original-URI $request_uri;
+  # Forward the dedicated bypass token header if you use bypass_headers.
+  proxy_set_header X-CryKeeper-Token $http_x_crykeeper_token;
 }
 
 location @crykeeper_challenge {
@@ -346,6 +348,9 @@ export CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES=true
 
 Use `bypass_ips` when you want the strongest built-in trust signal. `bypass_headers` works well for scripts, CI jobs, uptime checks, or other automation clients that can attach a long random token such as `X-CryKeeper-Token: ...` themselves. Tokens must be at least 32 characters long. Treat them as bearer secrets, not as trustworthy identity claims: anyone who knows a token can bypass the check, so keep tokens random, rotate them when needed, and use them only over HTTPS. If your public edge injects, strips, or rewrites that header, keep that behavior deliberate and consistent. `bypass_user_agents` and `allow_known_search_engines` are convenient, but both ultimately rely on a client-controlled header.
 
+> [!NOTE]
+> When nginx sits in front of cryKeeper, remember that the auth subrequest only sees the headers that nginx forwards into `auth_request`. If you expect `bypass_headers` to match, explicitly mirror the chosen token header such as `X-CryKeeper-Token` into the `/check` subrequest.
+
 ## When Valkey Makes Sense
 
 cryKeeper stays stateless even when you enable Valkey. The only thing stored in Valkey is rate-limit state; the human-verification cookie remains signed and client-side.
@@ -464,6 +469,24 @@ Then open:
 - `https://hcaptcha.localhost:8443/protected/`
 - `https://dashboard.localhost:8443/`
 - `https://localhost:8443/protected/skip-route/`
+
+### Benchmark using Local Demo Stack
+
+The repository also includes [scripts/benchmark_auth_request.py](scripts/benchmark_auth_request.py) for a rough local comparison of nginx response latency with and without the `auth_request` path. It targets the running demo stack on `dummy.localhost` by default and measures:
+
+- a direct unprotected backend response
+- a protected response that falls through to the challenge page
+- a protected response with a real verification cookie minted through Dummy mode
+- a protected `skip_routes` hit
+- an optional protected header-bypass hit when your local config defines `X-CryKeeper-Token=...` or `X-Bypass-Token=...`
+
+Example:
+
+```bash
+python scripts/benchmark_auth_request.py --requests 400 --concurrency 20
+```
+
+If you also want the header-bypass scenario, add one of the documented bypass tokens to your local `config.toml`, restart cryKeeper, and rerun the benchmark. The checked-in demo nginx already mirrors `X-CryKeeper-Token` into the auth subrequest so those scenarios are measurable end to end.
 
 ## Troubleshooting
 

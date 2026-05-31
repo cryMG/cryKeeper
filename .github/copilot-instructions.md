@@ -43,6 +43,7 @@ This repository is a minimal Flask-based human cryKeeper that sits in front of n
 - `docker-compose.yml` is the checked-in local/testing example stack. It builds the cryKeeper from the current source tree and adds nginx, the demo backend, a bundled local Cap container, and Valkey. It mounts the project-root `config.toml` into the cryKeeper so local file-based configuration is active by default.
 - The README installation section should default to the published `ghcr.io/crymg/crykeeper:latest` image; the checked-in `docker-compose.yml` remains the source-based local/testing entry point.
 - The example nginx terminates HTTPS with a self-signed certificate on port 8443 and proxies browser-side CAP traffic under `/cap`; generate the cert once on the host with `nginx/demo-cert.cnf` and mount it into the container via `nginx/certs`. Keep `config.toml`, `nginx/nginx.demo.conf`, and `nginx/demo-cert.cnf` aligned with the demo hosts. In the example stack, `localhost` and `cap.localhost` remain Cap demos, `full.localhost` demonstrates a fully protected Dummy host, `dummy.localhost` demonstrates Dummy mode on `/protected/`, `hcaptcha.localhost` demonstrates hCaptcha with public test keys, `altcha.localhost` demonstrates ALTCHA with cryKeeper-hosted challenges, and `dashboard.localhost` exposes only the internal observability dashboard plus metrics. Use `CRYKEEPER_CAP_PUBLIC_BASE_URL=https://localhost:8443/cap` and `CRYKEEPER_CAP_INTERNAL_BASE_URL=http://cap:3000` for the Cap host.
+- The example nginx auth_request locations also mirror `X-CryKeeper-Token` into `GET /check` so local `bypass_headers` behavior and the dev benchmark can be exercised end to end. Keep README guidance aligned if you change those forwarded headers.
 - For local end-to-end testing, always use:
 
 ```bash
@@ -57,6 +58,7 @@ docker compose up --build
 - `entrypoint.sh`: container startup wrapper that prepares Prometheus multiprocess storage and then execs Gunicorn or an overridden command.
 - `config.example.toml`: example file-based configuration using shared `[crykeeper]` defaults and optional `[[website]]` overrides.
 - `examples/demo-backend/app.py`: fake protected upstream used only for local demo/testing. It also exposes `/protected/skip-route/` so the demo can verify `skip_routes` end to end.
+- `scripts/benchmark_auth_request.py`: local dev benchmark that compares nginx responses for direct backend access, challenge fallback, valid cookies, skip routes, and optional forwarded header bypasses against the running demo stack.
 - `.env.example`: documented environment template. Keep comments aligned with the real behavior.
 - `pyproject.toml`: central Ruff and Bandit configuration for repo-wide Python quality checks.
 - `.github/workflows/tests.yml`: CI workflow that runs unit tests plus the configured Python quality checks.
