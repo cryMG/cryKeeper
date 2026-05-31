@@ -443,7 +443,7 @@ def _mint_dummy_cookie(target: Target, path_prefix: str, user_agent: str) -> str
 
 def _open_connection(target: Target) -> http.client.HTTPConnection:
   if target.scheme == "https":
-    context = ssl._create_unverified_context()
+    context = ssl._create_unverified_context()  # nosec B323
     return http.client.HTTPSConnection(
       target.connect_host,
       target.port,
