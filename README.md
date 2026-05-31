@@ -4,6 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?style=flat-square&logo=docker&logoColor=white)](https://github.com/cryMG/cryKeeper/pkgs/container/crykeeper)
+![GDPR-Friendly](https://img.shields.io/badge/GDPR-friendly-blue?style=flat-square&logo=europeanunion&logoColor=white)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cryMG/cryKeeper/tests.yml?branch=main&style=flat-square&label=tests&color=success)](https://github.com/cryMG/cryKeeper/actions)
 
 > [!NOTE]
@@ -14,10 +15,11 @@ cryKeeper is a lightweight, Python-powered security container designed to protec
 
 **Why cryKeeper?**
 
-- Open Source: Fully transparent, with no hidden dependencies.
-- Zero Backend Overhead: Bots are rejected directly at the nginx level.
-- Docker-Ready: Deploy in seconds via `docker-compose`.
-- Language Agnostic: Works flawlessly whether your app is as static website or built in Node.js, PHP, Go, Python or any other language.
+- **Open Source:** Fully transparent, with no hidden dependencies.
+- **GDPR-Friendly:** No tracking, no third-party cookies, and a strong focus on user privacy.
+- **Zero Backend Overhead:** Bots are rejected directly at the nginx level.
+- **Docker-Ready:** Deploy in seconds via `docker-compose`.
+- **Language Agnostic:** Works flawlessly whether your app is as static website or built in Node.js, PHP, Go, Python or any other language.
 
 ![Challenge page example](docs/challenge-page.webp)
 
@@ -273,6 +275,14 @@ export CRYKEEPER_TRUSTED_PROXY_CIDRS=172.16.0.0/12
 
 Non-empty environment variables override only the shared defaults. They do not create or override individual `[[website]]` entries.
 
+### Logging Privacy
+
+Anonymized client-IP logging is enabled by default. Keep `anonymize_client_ip_logs = true` or `CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS=true` when cryKeeper's own application logs must not contain full client IPs. When enabled, the `client_ip` log field is reduced to an anonymized network prefix such as `203.0.113.0/24` or `2001:db8:abcd::/48`.
+
+This is a shared setting and must be configured under `[crykeeper]` or via `CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS`; `[[website]]` entries do not override it. This changes only cryKeeper application logs. The full sanitized client IP is still used in-memory for `human_cookie_binding = "ip-user-agent"`, `bypass_ips`, rate limiting, and provider verification where required. The signed cookie itself never stores the raw IP or raw `User-Agent`; it stores only an HMAC digest of the computed client binding. The bundled Docker image's Gunicorn access logs include the same anonymized client-IP value through the custom logger in `gunicorn.conf.py`. External reverse-proxy or platform logs are still separate and may record full client IPs unless you configure them independently.
+
+### Custom Footer
+
 `footer_html` is optional. If you leave it unset, the challenge page shows the built-in cryKeeper footer by default. Set it to a custom trusted HTML string or a locale-keyed table to override that default per host. Set it to `-` to hide the challenge footer entirely. The internal dashboard always shows the built-in default footer.
 
 ### Enforcement Modes
@@ -354,6 +364,7 @@ In practice, `rate_limit_backend = "auto"` plus a configured `rate_limit_valkey_
 - Keep `enforcement_mode = "enforce"` outside planned validation windows, because both rollout modes intentionally allow access that would otherwise be challenged
 - Keep the reverse proxy prefix aligned with `path_prefix`
 - Set `trusted_proxy_hops` and `trusted_proxy_cidrs` to match your real proxy chain whenever a reverse proxy supplies forwarded headers
+- Leave `anonymize_client_ip_logs` enabled unless you explicitly need full client IP addresses in cryKeeper's own application logs, and configure your reverse-proxy logs separately if they have the same requirement
 - Decide explicitly whether trusted crawlers, monitoring systems, or upstreams should bypass the human check via `bypass_ips`, `bypass_headers`, `bypass_user_agents`, or `allow_known_search_engines`
 - If you enable `bypass_headers`, use long random tokens with at least 32 characters over HTTPS and keep any proxy-side stripping, forwarding, or injection deliberate and consistent
 - If you run multiple cryKeeper workers or replicas, configure Valkey for shared rate limiting via `rate_limit_backend` and `rate_limit_valkey_url`; this includes the default Docker image, which starts Gunicorn with 2 workers

@@ -1,3 +1,6 @@
+import base64
+import importlib.util
+import json
 import os
 import tempfile
 import textwrap
@@ -10,11 +13,22 @@ from altcha import Payload as AltchaPayload
 from altcha import solve_challenge as solve_altcha_challenge
 from app.captcha.base import VerificationResult
 from app.captcha.cap import CapVerificationResult
+from app.cookies import issue_token_for_client
 
 from app import create_app
 
 
 class CryKeeperHardeningTests(unittest.TestCase):
+  def _load_gunicorn_config_module(self):
+    config_path = Path(__file__).resolve().parents[1] / "gunicorn.conf.py"
+    spec = importlib.util.spec_from_file_location(
+      "crykeeper_gunicorn_conf", config_path
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
   def _write_config(self, directory: str, contents: str) -> str:
     config_path = Path(directory) / "config.toml"
     config_path.write_text(textwrap.dedent(contents), encoding="utf-8")
@@ -180,6 +194,23 @@ class CryKeeperHardeningTests(unittest.TestCase):
     )
 
     self.assertEqual(204, replay.status_code)
+
+  def test_ip_bound_cookie_persists_only_a_binding_digest(self):
+    token = issue_token_for_client(
+      "test-secret",
+      60,
+      client_binding="ua=test-agent|ip=203.0.113.42",
+    )
+
+    payload_b64, _ = token.split(".", 1)
+    payload = json.loads(
+      base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
+    )
+
+    self.assertIn("cb", payload)
+    self.assertNotIn("ip", payload)
+    self.assertNotIn("203.0.113.42", json.dumps(payload))
+    self.assertNotEqual("ua=test-agent|ip=203.0.113.42", payload["cb"])
 
   def test_non_local_verification_requires_secure_cookie_policy(self):
     app = self._create_app()
@@ -432,6 +463,111 @@ class CryKeeperHardeningTests(unittest.TestCase):
         for log_entry in captured_logs.output
       )
     )
+
+  def test_client_ip_logs_remain_full_when_anonymization_is_disabled(self):
+    app = self._create_app(
+      CRYKEEPER_ENFORCEMENT_MODE="log_only",
+      CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS="false",
+    )
+
+    with self.assertLogs(app.logger.name, level="INFO") as captured_logs:
+      response = app.test_client().get(
+        "/crykeeper/check",
+        base_url="http://localhost",
+        headers={"X-Original-URI": "/protected/resource"},
+        environ_overrides={"REMOTE_ADDR": "203.0.113.42"},
+      )
+
+    self.assertEqual(204, response.status_code)
+    log_record = next(
+      record
+      for record in captured_logs.records
+      if record.getMessage() == "Log-only mode would redirect to challenge"
+    )
+    self.assertEqual("203.0.113.42", log_record.client_ip)
+
+  def test_gunicorn_access_log_ip_is_anonymized_by_default(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "test-secret"
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        module = self._load_gunicorn_config_module()
+
+    self.assertEqual(
+      "203.0.113.0/24",
+      module.access_log_remote_addr({"HTTP_HOST": "localhost"}, "203.0.113.42"),
+    )
+
+  def test_gunicorn_access_log_ip_uses_shared_setting_for_all_hosts(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "test-secret"
+                anonymize_client_ip_logs = false
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        module = self._load_gunicorn_config_module()
+
+    self.assertEqual(
+      "203.0.113.42",
+      module.access_log_remote_addr(
+        {"HTTP_HOST": "dummy.localhost:8443"}, "203.0.113.42"
+      ),
+    )
+
+  def test_client_ip_logs_are_anonymized_when_enabled(self):
+    app = self._create_app(
+      CRYKEEPER_ENFORCEMENT_MODE="log_only",
+      CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS="true",
+    )
+
+    with self.assertLogs(app.logger.name, level="INFO") as captured_logs:
+      response = app.test_client().get(
+        "/crykeeper/check",
+        base_url="http://localhost",
+        headers={"X-Original-URI": "/protected/resource"},
+        environ_overrides={"REMOTE_ADDR": "203.0.113.42"},
+      )
+
+    self.assertEqual(204, response.status_code)
+    log_record = next(
+      record
+      for record in captured_logs.records
+      if record.getMessage() == "Log-only mode would redirect to challenge"
+    )
+    self.assertEqual("203.0.113.0/24", log_record.client_ip)
+
+  def test_ipv6_client_ip_logs_are_anonymized_when_enabled(self):
+    app = self._create_app(
+      CRYKEEPER_ENFORCEMENT_MODE="log_only",
+      CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS="true",
+    )
+
+    with self.assertLogs(app.logger.name, level="INFO") as captured_logs:
+      response = app.test_client().get(
+        "/crykeeper/check",
+        base_url="http://localhost",
+        headers={"X-Original-URI": "/protected/resource"},
+        environ_overrides={"REMOTE_ADDR": "2001:db8:abcd:1234:5678::42"},
+      )
+
+    self.assertEqual(204, response.status_code)
+    log_record = next(
+      record
+      for record in captured_logs.records
+      if record.getMessage() == "Log-only mode would redirect to challenge"
+    )
+    self.assertEqual("2001:db8:abcd::/48", log_record.client_ip)
 
   def test_challenge_passthrough_mode_still_redirects_to_challenge(self):
     app = self._create_app(CRYKEEPER_ENFORCEMENT_MODE="challenge_passthrough")

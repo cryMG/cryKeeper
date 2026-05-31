@@ -2,7 +2,7 @@ import hmac
 import re
 import time
 from http import HTTPStatus
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from urllib.parse import urlencode, urlsplit
 
 from flask import (
@@ -86,7 +86,7 @@ def check() -> tuple[str, int] | Response:
         "reason": bypass_reason,
         "request_method": _original_request_method(),
         "request_path": _original_request_path(),
-        "client_ip": _client_ip_value(),
+        "client_ip": _client_ip_log_value(),
       },
     )
     return "", HTTPStatus.NO_CONTENT
@@ -113,7 +113,7 @@ def check() -> tuple[str, int] | Response:
           "return_path": return_path,
           "request_method": _original_request_method(),
           "request_path": _original_request_path(),
-          "client_ip": _client_ip_value(),
+          "client_ip": _client_ip_log_value(),
         },
       )
       return "", HTTPStatus.NO_CONTENT
@@ -129,7 +129,7 @@ def check() -> tuple[str, int] | Response:
         "return_path": return_path,
         "request_method": _original_request_method(),
         "request_path": _original_request_path(),
-        "client_ip": _client_ip_value(),
+        "client_ip": _client_ip_log_value(),
       },
     )
     return "", HTTPStatus.NO_CONTENT
@@ -553,7 +553,7 @@ def _rate_limit_decision(scope: str) -> object | None:
     "Rate limit exceeded",
     extra={
       "scope": scope,
-      "client_ip": _client_ip_value(),
+      "client_ip": _client_ip_log_value(),
       "retry_after_seconds": decision.retry_after_seconds,
     },
   )
@@ -717,6 +717,29 @@ def _normalized_user_agent(value: str | None) -> str:
 def _client_ip_value() -> str:
   """Use the post-proxy remote peer instead of parsing untrusted forwarded chains here."""
   return _normalized_ip(request.remote_addr) or ""
+
+
+def _client_ip_log_value() -> str:
+  """Return the client IP as it should appear in log records for this request."""
+  client_ip = _client_ip_value()
+  if not client_ip:
+    return ""
+
+  if not _settings().anonymize_client_ip_logs:
+    return client_ip
+
+  return _anonymized_log_ip(client_ip)
+
+
+def _anonymized_log_ip(value: str) -> str:
+  """Reduce IP precision in logs while keeping coarse subnet context."""
+  try:
+    parsed_ip = ip_address(value)
+  except ValueError:
+    return value
+
+  prefix_length = 24 if parsed_ip.version == 4 else 48
+  return ip_network(f"{parsed_ip.compressed}/{prefix_length}", strict=False).compressed
 
 
 def _is_local_request_host() -> bool:

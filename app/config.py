@@ -46,6 +46,7 @@ CONFIGURABLE_ENV_SUFFIXES = (
   "TRUSTED_PROXY_HOPS",
   "TRUSTED_PROXY_CIDRS",
   "LOG_LEVEL",
+  "ANONYMIZE_CLIENT_IP_LOGS",
   "VERIFICATION_MODE",
   "CAP_PUBLIC_BASE_URL",
   "CAP_INTERNAL_BASE_URL",
@@ -88,6 +89,7 @@ NON_WEBSITE_OVERRIDE_SUFFIXES = (
   "TRUSTED_PROXY_HOPS",
   "TRUSTED_PROXY_CIDRS",
   "LOG_LEVEL",
+  "ANONYMIZE_CLIENT_IP_LOGS",
   "RATE_LIMIT_BACKEND",
   "RATE_LIMIT_VALKEY_URL",
   "RATE_LIMIT_VALKEY_PREFIX",
@@ -757,6 +759,7 @@ class Settings:
   trusted_proxy_hops: int
   trusted_proxy_cidrs: tuple[str, ...]
   log_level: str
+  anonymize_client_ip_logs: bool
   verification_mode: str
   cap_public_base_url: str
   cap_internal_base_url: str
@@ -987,6 +990,11 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
       _env_name("TRUSTED_PROXY_CIDRS"),
     ),
     log_level=_read_text(config_source, _env_name("LOG_LEVEL"), "INFO").upper(),
+    anonymize_client_ip_logs=_read_bool(
+      config_source,
+      _env_name("ANONYMIZE_CLIENT_IP_LOGS"),
+      True,
+    ),
     verification_mode=_read_text(
       config_source,
       _env_name("VERIFICATION_MODE"),

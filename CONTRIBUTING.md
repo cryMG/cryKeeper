@@ -74,6 +74,10 @@ For development, these files are the most important entry points:
 - [config.example.toml](config.example.toml): reference configuration
 - [nginx/nginx.demo.conf](nginx/nginx.demo.conf): working nginx auth_request example used by the demo stack
 
+## Gnuicorn Hints
+
+The Gunicorn access-log redaction happens in [gunicorn.conf.py](gunicorn.conf.py), where a custom logger class rewrites the logged remote address based on the shared `anonymize_client_ip_logs` setting.
+
 ## Release Process
 
 When you're ready to release a new version of cryKeeper, please follow these steps:

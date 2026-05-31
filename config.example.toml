@@ -97,6 +97,16 @@ trusted_proxy_cidrs = ["172.16.0.0/12"]
 # to uppercase internally.
 log_level = "INFO"
 
+# When true, cryKeeper logs anonymized client IP network prefixes instead of
+# full client IP addresses in its own application logs.
+#
+# IPv4 addresses are reduced to /24 and IPv6 addresses to /48. This affects
+# only cryKeeper log records. Cookie binding, bypass_ips, rate limiting, and
+# provider verification continue using the full sanitized client IP in-memory
+# when required, and the signed cookie stores only an HMAC digest of the
+# binding.
+anonymize_client_ip_logs = true
+
 # Verification backend used by the challenge flow.
 #
 # dummy:
@@ -339,8 +349,9 @@ altcha_expires_seconds = 300
 # or modify individual [[website]] entries.
 #
 # The following keys stay global and must remain under [crykeeper]:
-# trusted_proxy_hops, trusted_proxy_cidrs, log_level, rate_limit_backend,
-# rate_limit_valkey_url, rate_limit_valkey_prefix, rate_limit_max_entries
+# trusted_proxy_hops, trusted_proxy_cidrs, log_level,
+# anonymize_client_ip_logs, rate_limit_backend, rate_limit_valkey_url,
+# rate_limit_valkey_prefix, rate_limit_max_entries
 #
 # When you override path_prefix here, keep the reverse-proxy routes for the same
 # host aligned with that prefix.

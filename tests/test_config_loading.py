@@ -30,6 +30,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 trusted_proxy_hops = 2
                 trusted_proxy_cidrs = ["10.0.0.0/8", "192.168.0.0/16"]
                 log_level = "debug"
+                anonymize_client_ip_logs = true
                 verification_mode = "cap"
                 cap_public_base_url = "https://cap.example.com/"
                 cap_internal_base_url = ""
@@ -82,6 +83,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual(2, settings.trusted_proxy_hops)
     self.assertEqual(("10.0.0.0/8", "192.168.0.0/16"), settings.trusted_proxy_cidrs)
     self.assertEqual("DEBUG", settings.log_level)
+    self.assertTrue(settings.anonymize_client_ip_logs)
     self.assertEqual("cap", settings.verification_mode)
     self.assertEqual("https://cap.example.com", settings.cap_public_base_url)
     self.assertEqual("https://cap.example.com", settings.cap_internal_base_url)
@@ -177,6 +179,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 trusted_proxy_cidrs = ["10.0.0.0/8"]
                 rate_limit_backend = "memory"
                 path_prefix = "/from-file"
+                anonymize_client_ip_logs = true
                 """,
       )
 
@@ -196,6 +199,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_TRUSTED_PROXY_CIDRS": "203.0.113.0/24",
           "CRYKEEPER_RATE_LIMIT_BACKEND": "valkey",
           "CRYKEEPER_PATH_PREFIX": "/from-env",
+          "CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS": "false",
         },
         clear=True,
       ):
@@ -229,6 +233,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual(("203.0.113.0/24",), settings.trusted_proxy_cidrs)
     self.assertEqual("valkey", settings.rate_limit_backend)
     self.assertEqual("/from-env", settings.path_prefix)
+    self.assertFalse(settings.anonymize_client_ip_logs)
 
   def test_blank_environment_variables_fall_back_to_toml_settings(self):
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -247,6 +252,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 allow_known_search_engines = true
                 rate_limit_backend = "valkey"
                 path_prefix = "/from-file"
+                anonymize_client_ip_logs = true
                 """,
       )
 
@@ -265,6 +271,7 @@ class ConfigLoadingTests(unittest.TestCase):
           "CRYKEEPER_ALLOW_KNOWN_SEARCH_ENGINES": "",
           "CRYKEEPER_RATE_LIMIT_BACKEND": "",
           "CRYKEEPER_PATH_PREFIX": "",
+          "CRYKEEPER_ANONYMIZE_CLIENT_IP_LOGS": "   ",
         },
         clear=True,
       ):
@@ -291,6 +298,7 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertTrue(settings.allow_known_search_engines)
     self.assertEqual("valkey", settings.rate_limit_backend)
     self.assertEqual("/from-file", settings.path_prefix)
+    self.assertTrue(settings.anonymize_client_ip_logs)
 
   def test_altcha_defaults_use_current_v3_widget_settings(self):
     with patch.dict(os.environ, {}, clear=True):
@@ -308,6 +316,7 @@ class ConfigLoadingTests(unittest.TestCase):
       settings = load_settings()
 
     self.assertEqual(24 * 60 * 60, settings.cookie_ttl_seconds)
+    self.assertTrue(settings.anonymize_client_ip_logs)
 
   def test_unknown_toml_keys_fail_fast(self):
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -333,6 +342,7 @@ class ConfigLoadingTests(unittest.TestCase):
                 path_prefix = "/from-file"
                 footer_html = { en = 'default footer', de = 'standardfuss' }
                 skip_routes = ["^/shared/"]
+                anonymize_client_ip_logs = true
 
                 [[website]]
                 domains = ["one.example.com", "TWO.example.com:443"]
@@ -372,6 +382,8 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("website-secret", site_settings.secret_key)
     self.assertFalse(site_settings.cookie_secure)
     self.assertEqual("crykeeper_verified", site_settings.cookie_name)
+    self.assertTrue(settings_bundle.default_settings.anonymize_client_ip_logs)
+    self.assertTrue(site_settings.anonymize_client_ip_logs)
     self.assertEqual(
       '<a href="/legal">website footer</a>', site_settings.footer_html.resolve("de")
     )
@@ -398,6 +410,28 @@ class ConfigLoadingTests(unittest.TestCase):
       tuple((rule.method, rule.pattern) for rule in fallback_settings.skip_routes),
     )
     self.assertEqual(settings_bundle.default_settings, fallback_settings)
+
+  def test_website_may_not_override_anonymized_client_ip_logging(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+                anonymize_client_ip_logs = true
+
+                [[website]]
+                domains = ["one.example.com"]
+                anonymize_client_ip_logs = false
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(
+          RuntimeError,
+          r"may not override anonymize_client_ip_logs inside \[\[website\]\] #1",
+        ):
+          load_settings_bundle()
 
   def test_invalid_skip_route_regex_fails_fast(self):
     with tempfile.TemporaryDirectory() as temp_dir:
