@@ -104,10 +104,11 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     dashboard_body = dashboard_response.get_data(as_text=True)
     metrics_body = metrics_response.get_data(as_text=True)
     self.assertIn("cryKeeper Dashboard", dashboard_body)
-    self.assertIn("Displayed challenges", dashboard_body)
-    self.assertIn("Skip routes", dashboard_body)
+    self.assertIn("Checks allowed", dashboard_body)
+    self.assertIn("Checks challenge required", dashboard_body)
+    self.assertIn("Rendered challenges since startup.", dashboard_body)
     self.assertIn("Unsolved challenges", dashboard_body)
-    self.assertIn("Displayed challenges since startup.", dashboard_body)
+    self.assertIn("Skip routes", dashboard_body)
     self.assertIn(
       "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
       dashboard_body,
