@@ -144,6 +144,7 @@ cryKeeper is intended to be called by nginx via `auth_request`. A minimal setup 
 ```nginx
 upstream crykeeper_app {
   server crykeeper:5000;
+  keepalive 16;
 }
 
 upstream protected_app {
@@ -153,6 +154,8 @@ upstream protected_app {
 location = /_crykeeper_check {
   internal;
   proxy_pass http://crykeeper_app/crykeeper/check;
+  proxy_http_version 1.1;
+  proxy_set_header Connection "";
   proxy_pass_request_body off;
   proxy_set_header Content-Length "";
   proxy_set_header Cookie $http_cookie;
@@ -168,6 +171,8 @@ location = /_crykeeper_check {
 
 location @crykeeper_challenge {
   proxy_pass http://crykeeper_app$auth_redirect;
+  proxy_http_version 1.1;
+  proxy_set_header Connection "";
   proxy_set_header Cookie $http_cookie;
   proxy_set_header Host $http_host;
   proxy_set_header X-Forwarded-Host $http_host;
@@ -184,6 +189,8 @@ location /protected/ {
 
 location ^~ /crykeeper/ {
   proxy_pass http://crykeeper_app;
+  proxy_http_version 1.1;
+  proxy_set_header Connection "";
   proxy_set_header Host $http_host;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-For $remote_addr;
@@ -494,6 +501,7 @@ If you also want the header-bypass scenario, add one of the documented bypass to
 
 - Challenge redirects usually fail when nginx and cryKeeper do not use the same `path_prefix`
 - Repeated challenges after a successful solve usually point to cookie, HTTPS, host, or proxy-header mismatches
+- If you get a "Verification is only available over HTTPS" message while the transport actually uses HTTPS, verify that cryKeeper receives the expected `X-Forwarded-Proto` header from your reverse proxy.
 - If `ip-user-agent` binding is unstable, verify `trusted_proxy_hops`, optional `trusted_proxy_cidrs`, and your forwarded-header setup
 - If a custom translation does not appear, check the JSON filename, keep English complete, and restart the container after adding or changing files
 - If `skip_routes` does not bypass the challenge, verify the regex against the original request path and make sure nginx forwards `X-Original-Method`
