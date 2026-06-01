@@ -15,15 +15,28 @@
         "Bypasses, valid cookies, and challenge redirects since startup.",
       value: (snapshot) => formatInteger(snapshot.checkRequests),
     },
-    verify_success_rate: {
+    checks_allowed: {
+      detail: (snapshot) => "Allowed check requests without challenge since startup.",
+      value: (snapshot) => formatInteger(snapshot.checksAllowed),
+    },
+    checks_challenge_required: {
       detail: (snapshot) =>
-        `${formatInteger(snapshot.verifySuccess)} successful verifies out of ${formatInteger(snapshot.verifyTotal)}.`,
-      value: (snapshot) => formatRate(snapshot.verifySuccess, snapshot.verifyTotal),
+        "Check requests that triggered a challenge since startup.",
+      value: (snapshot) => formatInteger(snapshot.checksChallengeRequired),
+    },
+    rendered_challenges: {
+      detail: () => "rendered challenges since startup.",
+      value: (snapshot) => formatInteger(snapshot.renderedChallenges),
     },
     unsolved_challenges: {
       detail: () =>
         "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
       value: (snapshot) => formatInteger(snapshot.unsolvedChallenges),
+    },
+    verify_success_rate: {
+      detail: (snapshot) =>
+        `${formatInteger(snapshot.verifySuccess)} successful verifies out of ${formatInteger(snapshot.verifyTotal)}.`,
+      value: (snapshot) => formatRate(snapshot.verifySuccess, snapshot.verifyTotal),
     },
     skip_routes: {
       detail: () => "Requests bypassed by configured skip_routes since startup.",
@@ -336,6 +349,21 @@
       backendFailureRows: buildBackendFailureRows(samples),
       backendFailures: sumSamples(samples, "crykeeper_rate_limit_backend_failures_total"),
       checkRequests: sumSamples(samples, "crykeeper_check_requests_total"),
+      checksAllowed: sumLabeledSamples(
+        samples,
+        "crykeeper_check_requests_total",
+        { outcome: "allowed" },
+      ),
+      checksChallengeRequired: sumLabeledSamples(
+        samples,
+        "crykeeper_check_requests_total",
+        { outcome: "challenge_required" },
+      ),
+      renderedChallenges: sumLabeledSamples(
+        samples,
+        "crykeeper_challenge_requests_total",
+        { outcome: "rendered" },
+      ),
       latencyRows: buildProviderLatencyRows(samples),
       rateLimitHits: sumSamples(samples, "crykeeper_rate_limit_hits_total"),
       rateLimitRows: buildRateLimitRows(samples),

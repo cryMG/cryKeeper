@@ -16,6 +16,7 @@ Released versions should use the Git tag as the section title, for example
 - Internal health check endpoint at `/_crykeeper/healthz` for container and proxy health checks.
 - Health check for the Docker image that uses the new endpoint.
 - Support for wildcard website domains like `*.example.com` in the configuration, which match all subdomains of `example.com` and are aggregated under a stable `+.example.com` host bucket in metrics and rate-limit keying. Wildcards do not match the apex domain itself (for example `*.example.com` does not match `example.com`).
+- New metrics shown in the dashboard: Checks allowed, Checks challenge required, Rendered challenges
 
 ### Changed
 

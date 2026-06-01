@@ -227,6 +227,12 @@ class CryKeeperObservability:
   def dashboard_snapshot(self) -> dict[str, object]:
     """Build the server-rendered dashboard view model from live samples."""
     samples = _sample_index(self._collector_registry())
+    checks_allowed = _sum_labeled_samples(
+      samples, "crykeeper_check_requests_total", outcome="allowed"
+    )
+    checks_challenge_required = _sum_labeled_samples(
+      samples, "crykeeper_check_requests_total", outcome="challenge_required"
+    )
     verify_totals = _verify_totals(samples)
     verify_success = verify_totals["success"]
     verify_total = verify_totals["total"]
@@ -234,6 +240,11 @@ class CryKeeperObservability:
       samples,
       "crykeeper_auth_bypass_total",
       reason="skip_route",
+    )
+    rendered_challenges = _sum_labeled_samples(
+      samples,
+      "crykeeper_challenge_requests_total",
+      outcome="rendered",
     )
     unsolved_challenges = _sum_samples(
       samples, "crykeeper_unsolved_challenge_attempts_total"
@@ -253,16 +264,34 @@ class CryKeeperObservability:
         "detail": "Bypasses, valid cookies, and challenge redirects since startup.",
       },
       {
-        "key": "verify_success_rate",
-        "title": "Verify success rate",
-        "value": _format_rate(verify_success, verify_total),
-        "detail": f"{_format_integer(verify_success)} successful verifies out of {_format_integer(verify_total)}.",
+        "key": "checks_allowed",
+        "title": "Checks allowed",
+        "value": _format_integer(checks_allowed),
+        "detail": "Allowed check requests without challenge since startup.",
+      },
+      {
+        "key": "checks_challenge_required",
+        "title": "Checks challenge required",
+        "value": _format_integer(checks_challenge_required),
+        "detail": "Check requests that triggered a challenge since startup.",
+      },
+      {
+        "key": "rendered_challenges",
+        "title": "Rendered challenges",
+        "value": _format_integer(rendered_challenges),
+        "detail": "Rendered challenges since startup.",
       },
       {
         "key": "unsolved_challenges",
         "title": "Unsolved challenges",
         "value": _format_integer(unsolved_challenges),
         "detail": "Explicit challenge attempts without success since startup. Abandoned pages are not observable.",
+      },
+      {
+        "key": "verify_success_rate",
+        "title": "Verify success rate",
+        "value": _format_rate(verify_success, verify_total),
+        "detail": f"{_format_integer(verify_success)} successful verifies out of {_format_integer(verify_total)}.",
       },
       {
         "key": "skip_routes",
