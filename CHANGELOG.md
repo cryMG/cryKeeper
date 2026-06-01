@@ -11,6 +11,16 @@ Released versions should use the Git tag as the section title, for example
 
 ## [Unreleased]
 
+### Added
+
+- Internal health check endpoint at `/_crykeeper/healthz` for container and proxy health checks.
+- Health check for the Docker image that uses the new endpoint.
+
+### Changed
+
+- Don't anonymize loopback addresses in the Gunicorn configuration, since they don't represent real clients.
+- Don't log health check requests from 127.0.0.1 to reduce noise in the logs.
+
 ## [v0.1.0] - 2026-05-31
 
 > [!IMPORTANT]

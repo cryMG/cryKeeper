@@ -1,6 +1,7 @@
 import math
 import os
 from collections import defaultdict
+from http import HTTPStatus
 from pathlib import Path
 
 from flask import (
@@ -336,6 +337,12 @@ def metrics() -> Response:
   payload = current_app.extensions["crykeeper_observability"].render_metrics()
   response = Response(payload, mimetype=CONTENT_TYPE_LATEST)
   return _with_observability_headers(response, content_type=CONTENT_TYPE_LATEST)
+
+
+@observability.get("/healthz")
+def healthz() -> tuple[str, int]:
+  """Return a minimal liveness response for container and proxy health checks."""
+  return "ok", HTTPStatus.OK
 
 
 def _with_observability_headers(
