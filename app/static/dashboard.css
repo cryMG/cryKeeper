@@ -68,6 +68,7 @@ main.dashboard-shell {
   justify-content: center;
   width: 2.8rem;
   min-width: 2.8rem;
+  margin-left: -0.95rem;
   padding: 0;
   border: 0;
   border-right: 1px solid var(--panel-border);

@@ -21,6 +21,10 @@ Released versions should use the Git tag as the section title, for example
 - Don't anonymize loopback addresses in the Gunicorn configuration, since they don't represent real clients.
 - Don't log health check requests from 127.0.0.1 to reduce noise in the logs.
 
+### Fixed
+
+- Small style fix in the dashboard.
+
 ## [v0.1.0] - 2026-05-31
 
 > [!IMPORTANT]
