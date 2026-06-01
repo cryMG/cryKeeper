@@ -250,6 +250,36 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     finally:
       os.remove("/tmp/crykeeper-test-config.toml")
 
+  def test_wildcard_domains_are_logged_under_plus_bucket(self):
+    config_path = "/tmp/crykeeper-test-config-wildcard.toml"
+    with open(config_path, "w", encoding="utf-8") as config_file:
+      config_file.write(
+        """[crykeeper]\nsecret_key = \"test-secret\"\nverification_mode = \"dummy\"\nhuman_cookie_secure = false\ntrusted_proxy_hops = 0\n\n[[website]]\ndomains = [\"*.example.com\"]\npath_prefix = \"/crykeeper\"\n"""
+      )
+
+    try:
+      app = self._create_app(CRYKEEPER_CONFIG_FILE=config_path)
+      client = app.test_client()
+
+      wildcard_response = client.get(
+        "/crykeeper/check",
+        base_url="http://foo.example.com",
+        headers={"X-Original-URI": "/ok"},
+      )
+      metrics_response = client.get(
+        "/_crykeeper/metrics",
+        base_url="http://localhost",
+      )
+
+      self.assertEqual(401, wildcard_response.status_code)
+      self.assertEqual(200, metrics_response.status_code)
+
+      metrics_body = metrics_response.get_data(as_text=True)
+      self.assertIn('host="+.example.com"', metrics_body)
+      self.assertNotIn('host="foo.example.com"', metrics_body)
+    finally:
+      os.remove(config_path)
+
   def test_dashboard_does_not_warn_for_legitimate_local_cap_http_override(self):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="cap",

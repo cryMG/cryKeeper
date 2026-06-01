@@ -9,6 +9,10 @@
 # hosts. Those per-website overrides are TOML-only and are matched against the
 # normalized Host header without any port suffix.
 #
+# Domains may be exact hosts like "app.example.com" or wildcard suffixes like
+# "*.example.com". Wildcards match subdomains only (for example
+# "foo.example.com"), not the apex domain itself ("example.com").
+#
 # Non-empty environment variables still override individual [crykeeper] values.
 # Matching [[website]] entries are applied afterwards and therefore can override
 # those shared defaults for their configured domains. In the Docker Compose
@@ -378,7 +382,7 @@ cap_secret_key = "other-cap-secret-key"
 # allow_known_search_engines = true
 
 [[website]]
-domains = ["dummy.localhost"]
+domains = ["dummy.localhost", "*.localhost"]
 verification_mode = "dummy"
 path_prefix = "/dummy-check"
 footer_html.en = 'Dummy demo powered by <strong>cryMG</strong>'

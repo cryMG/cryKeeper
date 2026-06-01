@@ -619,6 +619,76 @@ class ConfigLoadingTests(unittest.TestCase):
     self.assertEqual("webseiten-footer", website_settings.footer_html.resolve("de"))
     self.assertEqual("english footer", website_settings.footer_html.resolve("fr"))
 
+  def test_website_wildcard_domains_match_subdomains_and_use_plus_bucket(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+
+                [[website]]
+                domains = ["*.example.com"]
+                secret_key = "wildcard-secret"
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        settings_bundle = load_settings_bundle()
+
+    wildcard_settings = settings_bundle.settings_for_host("foo.example.com")
+    deep_wildcard_settings = settings_bundle.settings_for_host("bar.foo.example.com")
+    apex_settings = settings_bundle.settings_for_host("example.com")
+
+    self.assertEqual("wildcard-secret", wildcard_settings.secret_key)
+    self.assertEqual("wildcard-secret", deep_wildcard_settings.secret_key)
+    self.assertEqual("file-secret", apex_settings.secret_key)
+    self.assertEqual("+.example.com", settings_bundle.canonical_host("foo.example.com"))
+    self.assertEqual(
+      "+.example.com", settings_bundle.canonical_host("bar.foo.example.com")
+    )
+
+  def test_website_localhost_wildcard_domains_are_valid(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+
+                [[website]]
+                domains = ["*.localhost"]
+                secret_key = "wildcard-localhost-secret"
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        settings_bundle = load_settings_bundle()
+
+    wildcard_settings = settings_bundle.settings_for_host("foo.localhost")
+    apex_settings = settings_bundle.settings_for_host("localhost")
+
+    self.assertEqual("wildcard-localhost-secret", wildcard_settings.secret_key)
+    self.assertEqual("file-secret", apex_settings.secret_key)
+    self.assertEqual("+.localhost", settings_bundle.canonical_host("foo.localhost"))
+
+  def test_invalid_wildcard_domain_pattern_fails_fast(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+                [crykeeper]
+                secret_key = "file-secret"
+
+                [[website]]
+                domains = ["*example.com"]
+                """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, r"leading '\*\.' prefix"):
+          load_settings_bundle()
+
   def test_footer_html_falls_back_from_regional_locale_to_base_language(self):
     with tempfile.TemporaryDirectory() as temp_dir:
       config_path = self._write_config(

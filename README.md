@@ -250,6 +250,7 @@ Use TOML for the main configuration:
 
 > [!TIP]
 > It's recommended to create `[[website]]` entries for each protected host even when you don't need per-host overrides, to get per-website rate limits, metrics and dashboard insights.
+> Wildcard website domains like `+.example.com` are aggregated under a stable `+.example.com` host bucket in metrics and rate-limit keying. `*.example.com` does not match `example.com`.
 > All unknown domains will be normalized to the `default` host with shared rate limits and metrics.
 
 Minimal example:

@@ -310,6 +310,25 @@ def _read_website_domains(
         "must contain valid host names."
       )
 
+    if "*" in normalized_domain and not normalized_domain.startswith("*."):
+      raise RuntimeError(
+        f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+        "may use wildcard '*' only as a leading '*.' prefix."
+      )
+
+    wildcard_suffix = _wildcard_domain_suffix(normalized_domain)
+    if wildcard_suffix is not None:
+      if (
+        not wildcard_suffix
+        or "*" in wildcard_suffix
+        or wildcard_suffix.startswith(".")
+        or wildcard_suffix.endswith(".")
+      ):
+        raise RuntimeError(
+          f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} domains "
+          "must use wildcards as '*.example.com' with a non-empty domain suffix."
+        )
+
     if normalized_domain in domains:
       raise RuntimeError(
         f"Config file {config_path} entry [[{WEBSITE_TABLE_NAME}]] #{index} contains "
@@ -324,6 +343,32 @@ def _read_website_domains(
     )
 
   return tuple(domains)
+
+
+def _wildcard_domain_suffix(domain_pattern: str) -> str | None:
+  """Return the wildcard suffix for '*.example.com' style patterns."""
+  if not domain_pattern.startswith("*."):
+    return None
+  return domain_pattern[2:]
+
+
+def _domain_pattern_matches(host: str, domain_pattern: str) -> bool:
+  """Return true when host matches either an exact or wildcard domain pattern."""
+  wildcard_suffix = _wildcard_domain_suffix(domain_pattern)
+  if wildcard_suffix is None:
+    return host == domain_pattern
+
+  if host == wildcard_suffix:
+    return False
+  return host.endswith(f".{wildcard_suffix}")
+
+
+def _canonical_domain_pattern(domain_pattern: str) -> str:
+  """Return one stable bucket label for exact and wildcard configured domains."""
+  wildcard_suffix = _wildcard_domain_suffix(domain_pattern)
+  if wildcard_suffix is None:
+    return domain_pattern
+  return f"+.{wildcard_suffix}"
 
 
 @dataclass(frozen=True)
@@ -929,8 +974,14 @@ class SettingsBundle:
       return "default"
 
     for website in self.websites:
-      if normalized_host in website.domains:
-        return normalized_host
+      for domain_pattern in website.domains:
+        if normalized_host == domain_pattern:
+          return normalized_host
+
+    for website in self.websites:
+      for domain_pattern in website.domains:
+        if _domain_pattern_matches(normalized_host, domain_pattern):
+          return _canonical_domain_pattern(domain_pattern)
 
     return "default"
 
@@ -941,8 +992,14 @@ class SettingsBundle:
       return self.default_settings
 
     for website in self.websites:
-      if normalized_host in website.domains:
-        return website.settings
+      for domain_pattern in website.domains:
+        if normalized_host == domain_pattern:
+          return website.settings
+
+    for website in self.websites:
+      for domain_pattern in website.domains:
+        if _domain_pattern_matches(normalized_host, domain_pattern):
+          return website.settings
 
     return self.default_settings
 
