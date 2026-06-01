@@ -85,7 +85,7 @@ KNOWN_SEARCH_ENGINE_USER_AGENTS = (
 def check() -> tuple[str, int] | Response:
   """Validate the signed cookie for nginx auth_request subrequests."""
   settings = _settings()
-  request_host = _request_host_name()
+  request_host = _request_host_bucket()
   _record_check_header_issues(request_host)
   original_uri = _original_request_uri()
   bypass_reason = _auth_bypass_reason(settings)
@@ -164,7 +164,7 @@ def check() -> tuple[str, int] | Response:
 def challenge() -> Response:
   """Render the interstitial page that triggers the active verification provider."""
   settings = _settings()
-  request_host = _request_host_name()
+  request_host = _request_host_bucket()
   return_path = normalize_return_path(
     request.args.get("return"),
     settings.blocked_return_prefixes,
@@ -197,7 +197,7 @@ def challenge() -> Response:
 def verify() -> Response:
   """Complete the active provider verification and issue the signed human cookie."""
   settings = _settings()
-  request_host = _request_host_name()
+  request_host = _request_host_bucket()
   verify_started_at = time.perf_counter()
   return_path = normalize_return_path(
     request.form.get("return"),
@@ -333,7 +333,7 @@ def verify() -> Response:
 def altcha_challenge() -> Response:
   """Return one fresh ALTCHA challenge when ALTCHA mode is active for the host."""
   settings = _settings()
-  request_host = _request_host_name()
+  request_host = _request_host_bucket()
   if not settings.altcha_enabled:
     response = jsonify({"error": "ALTCHA mode is not active for this host."})
     response.status_code = HTTPStatus.NOT_FOUND
@@ -542,7 +542,7 @@ def _rate_limit_response(scope: str, return_path: str) -> Response | None:
     return None
 
   settings = _settings()
-  request_host = _request_host_name()
+  request_host = _request_host_bucket()
   if scope == "challenge":
     _observability().record_challenge(
       request_host,
@@ -580,15 +580,16 @@ def _rate_limit_decision(scope: str) -> object | None:
   """Return the limiter decision for one public endpoint when a client is blocked."""
   settings = _settings()
   rate_limiter = current_app.extensions["crykeeper_rate_limiter"]
+  request_host = _request_host_bucket()
   decision = rate_limiter.check(
-    f"{scope}:{_request_host_name() or 'default'}:{_rate_limit_client_key()}",
+    f"{scope}:{request_host}:{_rate_limit_client_key()}",
     _rate_limit_rule(scope, settings),
   )
   if decision.allowed:
     return None
 
   _observability().record_rate_limit_hit(
-    _request_host_name(),
+    request_host,
     scope,
     rate_limiter.metrics_backend_name,
   )
@@ -824,6 +825,11 @@ def _is_local_request_host() -> bool:
 def _request_host_name() -> str:
   """Return the normalized host name without a port suffix."""
   return normalize_host_name(request.host)
+
+
+def _request_host_bucket() -> str:
+  """Return one bounded host key for metrics and rate-limit bucketing."""
+  return current_app.config["SETTINGS_BUNDLE"].canonical_host(request.host)
 
 
 def _original_request_method() -> str:

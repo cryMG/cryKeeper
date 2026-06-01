@@ -20,6 +20,7 @@ Released versions should use the Git tag as the section title, for example
 
 - Don't anonymize loopback addresses in the Gunicorn configuration, since they don't represent real clients.
 - Don't log health check requests from 127.0.0.1 to reduce noise in the logs.
+- Unknown website domains will now be normalized to the `default` host with shared rate limits and metrics, instead of being measured separately. This prevents DoS attacks from creating many unique host entries and consuming resources.
 
 ### Fixed
 

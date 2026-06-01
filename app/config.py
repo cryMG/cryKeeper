@@ -922,6 +922,18 @@ class SettingsBundle:
   default_settings: Settings
   websites: tuple[WebsiteSettings, ...]
 
+  def canonical_host(self, host: str | None) -> str:
+    """Return one bounded host key for metrics and other runtime bucketing."""
+    normalized_host = normalize_host_name(host)
+    if not normalized_host:
+      return "default"
+
+    for website in self.websites:
+      if normalized_host in website.domains:
+        return normalized_host
+
+    return "default"
+
   def settings_for_host(self, host: str | None) -> Settings:
     """Return the effective settings that apply to the current request host."""
     normalized_host = normalize_host_name(host)

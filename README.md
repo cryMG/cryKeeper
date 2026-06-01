@@ -248,6 +248,10 @@ Use TOML for the main configuration:
 - The default config path inside the container is `/app/config.toml`
 - `path_prefix` must not equal `/_crykeeper`, because that fixed prefix is reserved for the internal observability endpoints
 
+> [!TIP]
+> It's recommended to create `[[website]]` entries for each protected host even when you don't need per-host overrides, to get per-website rate limits, metrics and dashboard insights.
+> All unknown domains will be normalized to the `default` host with shared rate limits and metrics.
+
 Minimal example:
 
 ```toml

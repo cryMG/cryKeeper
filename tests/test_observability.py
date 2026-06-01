@@ -53,7 +53,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertIn("crykeeper_unsolved_challenge_attempts", metrics_body)
     self.assertIn("crykeeper_request_header_issues_total", metrics_body)
     self.assertIn("crykeeper_verify_attempts_total", metrics_body)
-    self.assertIn('host="localhost"', metrics_body)
+    self.assertIn('host="default"', metrics_body)
     self.assertIn('header="x-original-method"', metrics_body)
     self.assertIn('provider="dummy"', metrics_body)
     self.assertIn('outcome="success"', metrics_body)
@@ -119,7 +119,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     self.assertIn("Runtime warnings", dashboard_body)
     self.assertIn("Trusted proxy hops are disabled", dashboard_body)
     self.assertIn("trusted_proxy_hops=0", dashboard_body)
-    self.assertIn("localhost", dashboard_body)
+    self.assertIn("default", dashboard_body)
     self.assertIn("dummy", dashboard_body)
     self.assertIn("data-dashboard-root", dashboard_body)
     self.assertIn("data-manual-refresh", dashboard_body)
@@ -206,6 +206,49 @@ class CryKeeperObservabilityTests(unittest.TestCase):
     dashboard_body = dashboard_response.get_data(as_text=True)
     self.assertIn("Missing auth_request headers observed", dashboard_body)
     self.assertIn("host 1", dashboard_body)
+
+  def test_unknown_hosts_collapse_into_default_metric_label(self):
+    app = self._create_app(
+      CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",
+    )
+    client = app.test_client()
+
+    with open("/tmp/crykeeper-test-config.toml", "w", encoding="utf-8") as config_file:
+      config_file.write(
+        """[crykeeper]\nsecret_key = \"test-secret\"\nverification_mode = \"dummy\"\nhuman_cookie_secure = false\ntrusted_proxy_hops = 0\n\n[[website]]\ndomains = [\"known.example\"]\npath_prefix = \"/crykeeper\"\n"""
+      )
+
+    try:
+      app = self._create_app(
+        CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",
+      )
+      client = app.test_client()
+
+      known_response = client.get(
+        "/crykeeper/check",
+        base_url="http://known.example",
+        headers={"X-Original-URI": "/ok"},
+      )
+      unknown_response = client.get(
+        "/crykeeper/check",
+        base_url="http://attacker.example",
+        headers={"X-Original-URI": "/ok"},
+      )
+      metrics_response = client.get(
+        "/_crykeeper/metrics",
+        base_url="http://localhost",
+      )
+
+      self.assertEqual(401, known_response.status_code)
+      self.assertEqual(401, unknown_response.status_code)
+      self.assertEqual(200, metrics_response.status_code)
+
+      metrics_body = metrics_response.get_data(as_text=True)
+      self.assertIn('host="known.example"', metrics_body)
+      self.assertIn('host="default"', metrics_body)
+      self.assertNotIn('host="attacker.example"', metrics_body)
+    finally:
+      os.remove("/tmp/crykeeper-test-config.toml")
 
   def test_dashboard_does_not_warn_for_legitimate_local_cap_http_override(self):
     app = self._create_app(
