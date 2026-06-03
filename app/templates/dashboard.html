@@ -72,6 +72,11 @@
                     <th>Successful</th>
                     <th>Total</th>
                     <th>Failures</th>
+                    <th>Check requests</th>
+                    <th>Checks allowed</th>
+                    <th>Checks challenge required</th>
+                    <th>Rendered challenges</th>
+                    <th>Rate limit hits</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -83,6 +88,11 @@
                       <td>{{ row.successful }}</td>
                       <td>{{ row.total }}</td>
                       <td>{{ row.failures }}</td>
+                      <td>{{ row.check_requests }}</td>
+                      <td>{{ row.checks_allowed }}</td>
+                      <td>{{ row.checks_challenge_required }}</td>
+                      <td>{{ row.rendered_challenges }}</td>
+                      <td>{{ row.rate_limit_hits }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

@@ -460,6 +460,24 @@ def _verify_totals(samples: dict[str, list[object]]) -> dict[str, float]:
 def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
   """Build per-host and per-provider verify summary rows for the dashboard."""
   grouped: dict[tuple[str, str], dict[str, object]] = {}
+
+  # First, collect all hosts from check_requests to ensure hosts with only checks appear
+  for sample in samples.get("crykeeper_check_requests_total", ()):
+    host = sample.labels.get("host", "default")
+    # Use "dummy" as default provider for hosts with only checks
+    key = (host, "dummy")
+    grouped.setdefault(
+      key,
+      {
+        "host": host,
+        "provider": "dummy",
+        "success": 0.0,
+        "total": 0.0,
+        "reasons": defaultdict(float),
+      },
+    )
+
+  # Then, collect verify attempts to populate actual provider and outcome data
   for sample in samples.get("crykeeper_verify_attempts_total", ()):
     labels = sample.labels
     key = (labels.get("host", "default"), labels.get("provider", "dummy"))
@@ -483,6 +501,8 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
 
   rows: list[dict[str, str]] = []
   for row in grouped.values():
+    host = row["host"]
+    provider = row["provider"]
     reasons = row["reasons"]
     failure_detail = "none"
     if reasons:
@@ -492,14 +512,40 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
           reasons.items(), key=lambda item: (-item[1], item[0])
         )
       )
+
+    check_requests = _sum_labeled_samples(
+      samples, "crykeeper_check_requests_total", host=host
+    )
+    checks_allowed = _sum_labeled_samples(
+      samples, "crykeeper_check_requests_total", host=host, outcome="allowed"
+    )
+    checks_challenge_required = _sum_labeled_samples(
+      samples, "crykeeper_check_requests_total", host=host, outcome="challenge_required"
+    )
+    rendered_challenges = _sum_labeled_samples(
+      samples,
+      "crykeeper_challenge_requests_total",
+      host=host,
+      provider=provider,
+      outcome="rendered",
+    )
+    rate_limit_hits = _sum_labeled_samples(
+      samples, "crykeeper_rate_limit_hits_total", host=host
+    )
+
     rows.append(
       {
-        "host": row["host"],
-        "provider": row["provider"],
+        "host": host,
+        "provider": provider,
         "success_rate": _format_rate(row["success"], row["total"]),
         "successful": _format_integer(row["success"]),
         "total": _format_integer(row["total"]),
         "failures": failure_detail,
+        "check_requests": _format_integer(check_requests),
+        "checks_allowed": _format_integer(checks_allowed),
+        "checks_challenge_required": _format_integer(checks_challenge_required),
+        "rendered_challenges": _format_integer(rendered_challenges),
+        "rate_limit_hits": _format_integer(rate_limit_hits),
       }
     )
 

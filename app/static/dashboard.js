@@ -151,6 +151,22 @@
    */
   function buildVerifyRows(samples) {
     const grouped = new Map();
+
+    // First, collect all hosts from check_requests to ensure hosts with only checks appear
+    for (const sample of samples.get("crykeeper_check_requests_total") ?? []) {
+      const host = sample.labels.host ?? "default";
+      // Use "dummy" as default provider for hosts with only checks
+      const key = `${host}\u0000dummy`;
+      grouped.set(key, {
+        host,
+        provider: "dummy",
+        reasons: new Map(),
+        success: 0,
+        total: 0,
+      });
+    }
+
+    // Then, collect verify attempts to populate actual provider and outcome data
     for (const sample of samples.get("crykeeper_verify_attempts_total") ?? []) {
       const host = sample.labels.host ?? "default";
       const provider = sample.labels.provider ?? "dummy";
@@ -188,6 +204,32 @@
               .join(", ")
           : "none";
 
+        const checkRequests = sumLabeledSamples(
+          samples,
+          "crykeeper_check_requests_total",
+          { host: row.host },
+        );
+        const checksAllowed = sumLabeledSamples(
+          samples,
+          "crykeeper_check_requests_total",
+          { host: row.host, outcome: "allowed" },
+        );
+        const checksChallengeRequired = sumLabeledSamples(
+          samples,
+          "crykeeper_check_requests_total",
+          { host: row.host, outcome: "challenge_required" },
+        );
+        const renderedChallenges = sumLabeledSamples(
+          samples,
+          "crykeeper_challenge_requests_total",
+          { host: row.host, provider: row.provider, outcome: "rendered" },
+        );
+        const rateLimitHits = sumLabeledSamples(
+          samples,
+          "crykeeper_rate_limit_hits_total",
+          { host: row.host },
+        );
+
         return {
           failures,
           host: row.host,
@@ -195,6 +237,11 @@
           success_rate: formatRate(row.success, row.total),
           successful: formatInteger(row.success),
           total: formatInteger(row.total),
+          check_requests: formatInteger(checkRequests),
+          checks_allowed: formatInteger(checksAllowed),
+          checks_challenge_required: formatInteger(checksChallengeRequired),
+          rendered_challenges: formatInteger(renderedChallenges),
+          rate_limit_hits: formatInteger(rateLimitHits),
         };
       })
       .sort((left, right) =>
@@ -495,6 +542,11 @@
         { heading: "Successful", render: (row) => escapeHtml(row.successful) },
         { heading: "Total", render: (row) => escapeHtml(row.total) },
         { heading: "Failures", render: (row) => escapeHtml(row.failures) },
+        { heading: "Check requests", render: (row) => escapeHtml(row.check_requests) },
+        { heading: "Checks allowed", render: (row) => escapeHtml(row.checks_allowed) },
+        { heading: "Checks challenge required", render: (row) => escapeHtml(row.checks_challenge_required) },
+        { heading: "Rendered challenges", render: (row) => escapeHtml(row.rendered_challenges) },
+        { heading: "Rate limit hits", render: (row) => escapeHtml(row.rate_limit_hits) },
       ],
       rows,
     );
