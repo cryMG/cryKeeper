@@ -464,13 +464,13 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
   # First, collect all hosts from check_requests to ensure hosts with only checks appear
   for sample in samples.get("crykeeper_check_requests_total", ()):
     host = sample.labels.get("host", "default")
-    # Use "dummy" as default provider for hosts with only checks
-    key = (host, "dummy")
+    # Use "-" as placeholder provider for hosts with only checks
+    key = (host, "-")
     grouped.setdefault(
       key,
       {
         "host": host,
-        "provider": "dummy",
+        "provider": "-",
         "success": 0.0,
         "total": 0.0,
         "reasons": defaultdict(float),
@@ -480,7 +480,7 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
   # Then, collect verify attempts to populate actual provider and outcome data
   for sample in samples.get("crykeeper_verify_attempts_total", ()):
     labels = sample.labels
-    key = (labels.get("host", "default"), labels.get("provider", "dummy"))
+    key = (labels.get("host", "default"), labels.get("provider", "-"))
     row = grouped.setdefault(
       key,
       {
@@ -548,6 +548,14 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
         "rate_limit_hits": _format_integer(rate_limit_hits),
       }
     )
+
+  # Remove placeholder entries if the same host has a real provider entry
+  hosts_with_real_providers = {row["host"] for row in rows if row["provider"] != "-"}
+  rows = [
+    row
+    for row in rows
+    if not (row["provider"] == "-" and row["host"] in hosts_with_real_providers)
+  ]
 
   return sorted(rows, key=lambda item: (item["host"], item["provider"]))
 

@@ -155,11 +155,11 @@
     // First, collect all hosts from check_requests to ensure hosts with only checks appear
     for (const sample of samples.get("crykeeper_check_requests_total") ?? []) {
       const host = sample.labels.host ?? "default";
-      // Use "dummy" as default provider for hosts with only checks
-      const key = `${host}\u0000dummy`;
+      // Use "-" as placeholder provider for hosts with only checks
+      const key = `${host}\u0000-`;
       grouped.set(key, {
         host,
-        provider: "dummy",
+        provider: "-",
         reasons: new Map(),
         success: 0,
         total: 0,
@@ -169,7 +169,7 @@
     // Then, collect verify attempts to populate actual provider and outcome data
     for (const sample of samples.get("crykeeper_verify_attempts_total") ?? []) {
       const host = sample.labels.host ?? "default";
-      const provider = sample.labels.provider ?? "dummy";
+      const provider = sample.labels.provider ?? "-";
       const key = `${host}\u0000${provider}`;
       const row = grouped.get(key) ?? {
         host,
@@ -246,7 +246,17 @@
       })
       .sort((left, right) =>
         left.host.localeCompare(right.host) || left.provider.localeCompare(right.provider),
-      );
+      )
+      // Remove placeholder entries if the same host has a real provider entry
+      .filter((row, _, array) => {
+        if (row.provider !== "-") {
+          return true;
+        }
+        const hasRealProvider = array.some(
+          (other) => other.host === row.host && other.provider !== "-",
+        );
+        return !hasRealProvider;
+      });
   }
 
   /**
@@ -347,7 +357,7 @@
         host: row.labels.host ?? "default",
         operation: row.labels.operation ?? "verify",
         p95: formatDuration(row.p95),
-        provider: row.labels.provider ?? "dummy",
+        provider: row.labels.provider ?? "-",
       }))
       .sort((left, right) =>
         left.host.localeCompare(right.host) ||
