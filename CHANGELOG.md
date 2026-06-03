@@ -11,6 +11,8 @@ Released versions should use the Git tag as the section title, for example
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-06-03
+
 ### Added
 
 - Internal health check endpoint at `/_crykeeper/healthz` for container and proxy health checks.
