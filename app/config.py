@@ -906,7 +906,6 @@ class Settings:
     return all(
       (
         self.cap_public_base_url,
-        self.cap_internal_base_url,
         self.cap_site_key,
         self.cap_secret_key,
       )
