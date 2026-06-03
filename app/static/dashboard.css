@@ -156,6 +156,10 @@ main.dashboard-shell {
   font-size: 0.9em;
 }
 
+.dashboard-shell .panel-table {
+  overflow-x: auto;
+}
+
 .dashboard-shell table {
   width: 100%;
   border-collapse: collapse;

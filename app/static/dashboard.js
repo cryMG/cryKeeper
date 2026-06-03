@@ -534,10 +534,7 @@
     return renderTable(
       [
         { heading: "Host", render: (row) => escapeHtml(row.host) },
-        {
-          heading: "Provider",
-          render: (row) => `<span class="badge">${escapeHtml(row.provider)}</span>`,
-        },
+        { heading: "Provider", render: (row) => escapeHtml(row.provider) },
         { heading: "Success rate", render: (row) => escapeHtml(row.success_rate) },
         { heading: "Successful", render: (row) => escapeHtml(row.successful) },
         { heading: "Total", render: (row) => escapeHtml(row.total) },
@@ -563,10 +560,7 @@
     return renderTable(
       [
         { heading: "Host", render: (row) => escapeHtml(row.host) },
-        {
-          heading: "Provider",
-          render: (row) => `<span class="badge">${escapeHtml(row.provider)}</span>`,
-        },
+        { heading: "Provider", render: (row) => escapeHtml(row.provider) },
         { heading: "Operation", render: (row) => escapeHtml(row.operation) },
         { heading: "Requests", render: (row) => escapeHtml(row.count) },
         { heading: "p95", render: (row) => escapeHtml(row.p95) },
@@ -607,7 +601,7 @@
       [
         {
           heading: "Fallback source",
-          render: (row) => `<span class="badge danger">${escapeHtml(row.backend)}</span>`,
+          render: (row) => escapeHtml(row.backend),
         },
         { heading: "Count", render: (row) => escapeHtml(row.count) },
       ],

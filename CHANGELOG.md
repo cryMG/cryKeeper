@@ -26,7 +26,7 @@ Released versions should use the Git tag as the section title, for example
 
 ### Fixed
 
-- Small style fix in the dashboard.
+- Some style fixes in the dashboard.
 
 ## [v0.1.0] - 2026-05-31
 

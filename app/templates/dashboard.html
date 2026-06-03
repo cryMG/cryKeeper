@@ -61,7 +61,7 @@
               <p>Success ratio and dominant failure reasons by host and provider.</p>
             </div>
           </div>
-          <div data-section="verify-rows">
+          <div class="panel-table" data-section="verify-rows">
             {% if snapshot.verify_rows %}
               <table>
                 <thead>
@@ -83,7 +83,7 @@
                   {% for row in snapshot.verify_rows %}
                     <tr>
                       <td>{{ row.host }}</td>
-                      <td><span class="badge">{{ row.provider }}</span></td>
+                      <td>{{ row.provider }}</td>
                       <td>{{ row.success_rate }}</td>
                       <td>{{ row.successful }}</td>
                       <td>{{ row.total }}</td>
@@ -110,7 +110,7 @@
               <p>p95 and average latency since startup, grouped by host, provider, and operation.</p>
             </div>
           </div>
-          <div data-section="latency-rows">
+          <div class="panel-table" data-section="latency-rows">
             {% if snapshot.latency_rows %}
               <table>
                 <thead>
@@ -127,7 +127,7 @@
                   {% for row in snapshot.latency_rows %}
                     <tr>
                       <td>{{ row.host }}</td>
-                      <td><span class="badge">{{ row.provider }}</span></td>
+                      <td>{{ row.provider }}</td>
                       <td>{{ row.operation }}</td>
                       <td>{{ row.count }}</td>
                       <td>{{ row.p95 }}</td>
@@ -149,7 +149,7 @@
               <p>Challenge and verify blocks plus backend fallback counts.</p>
             </div>
           </div>
-          <div data-section="rate-limit-rows">
+          <div class="panel-table" data-section="rate-limit-rows">
             {% if snapshot.rate_limit_rows %}
               <table>
                 <thead>
@@ -176,7 +176,7 @@
             {% endif %}
           </div>
 
-          <div data-section="backend-failure-rows">
+          <div class="panel-table" data-section="backend-failure-rows">
             {% if snapshot.backend_failure_rows %}
               <table>
                 <thead>
