@@ -27,6 +27,7 @@ Released versions should use the Git tag as the section title, for example
 ### Fixed
 
 - Some style fixes in the dashboard.
+- Only show User-Agent issues in dashboard, if no request had a valid User-Agent per host.
 
 ## [v0.1.0] - 2026-05-31
 

@@ -683,18 +683,21 @@ def _runtime_warnings(
 
   header_issue_counts = _request_header_issue_counts(samples)
   if header_issue_counts:
-    warnings.append(
-      _runtime_warning(
-        "fail",
-        "Missing auth_request headers observed",
-        "GET /check saw missing proxy and auth_request headers: "
-        + ", ".join(
-          f"{header} {_format_integer(count)}"
-          for header, count in sorted(header_issue_counts.items())
+    # Filter out user-agent issues if at least one request had a user-agent for that host
+    filtered_counts = _filter_user_agent_issues(samples, header_issue_counts)
+    if filtered_counts:
+      warnings.append(
+        _runtime_warning(
+          "fail",
+          "Missing auth_request headers observed",
+          "GET /check saw missing proxy and auth_request headers: "
+          + ", ".join(
+            f"{header} {_format_integer(count)}"
+            for header, count in sorted(filtered_counts.items())
+          )
+          + " since startup. Check nginx auth_request forwarding for host, user-agent, x-forwarded-for, x-forwarded-proto, x-original-method, and x-original-uri.",
         )
-        + " since startup. Check nginx auth_request forwarding for host, user-agent, x-forwarded-for, x-forwarded-proto, x-original-method, and x-original-uri.",
       )
-    )
 
   return sorted(
     warnings,
@@ -739,6 +742,55 @@ def _request_header_issue_counts(
   for sample in samples.get("crykeeper_request_header_issues_total", ()):
     counts[sample.labels.get("header", "unknown")] += sample.value
   return dict(counts)
+
+
+def _filter_user_agent_issues(
+  samples: dict[str, list[object]],
+  header_issue_counts: dict[str, float],
+) -> dict[str, float]:
+  """Filter out user-agent issues if at least one request had a user-agent for that host."""
+  # Get all hosts that have user-agent issues
+  user_agent_issue_hosts = set()
+  for sample in samples.get("crykeeper_request_header_issues_total", ()):
+    if sample.labels.get("header") == "user-agent":
+      user_agent_issue_hosts.add(sample.labels.get("host", "default"))
+
+  # For each host with user-agent issues, check if all requests lacked user-agent
+  hosts_with_all_missing = set()
+  for host in user_agent_issue_hosts:
+    user_agent_issues = _sum_labeled_samples(
+      samples,
+      "crykeeper_request_header_issues_total",
+      host=host,
+      header="user-agent",
+    )
+    total_requests = _sum_labeled_samples(
+      samples,
+      "crykeeper_check_requests_total",
+      host=host,
+    )
+    # Only keep the warning if ALL requests lacked user-agent
+    if user_agent_issues == total_requests and total_requests > 0:
+      hosts_with_all_missing.add(host)
+
+  # Filter the header_issue_counts: only include user-agent if all requests for that host lacked it
+  filtered_counts = {}
+  for header, count in header_issue_counts.items():
+    if header != "user-agent":
+      filtered_counts[header] = count
+    else:
+      # Calculate total user-agent issues only for hosts where ALL requests lacked user-agent
+      total_filtered = 0.0
+      for sample in samples.get("crykeeper_request_header_issues_total", ()):
+        if (
+          sample.labels.get("header") == "user-agent"
+          and sample.labels.get("host", "default") in hosts_with_all_missing
+        ):
+          total_filtered += sample.value
+      if total_filtered > 0:
+        filtered_counts[header] = total_filtered
+
+  return filtered_counts
 
 
 def _histogram_snapshot(
