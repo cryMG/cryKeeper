@@ -88,6 +88,15 @@ For development, these files are the most important entry points:
 
 The Gunicorn access-log redaction happens in [gunicorn.conf.py](gunicorn.conf.py), where a custom logger class rewrites the logged remote address based on the shared `anonymize_client_ip_logs` setting.
 
+## Updating Third-Party Asset
+
+### ALTCHA
+
+- Upstream project: [ALTCHA](https://github.com/altcha-org/altcha)
+- Bundled artifact: file `dist/main/altcha.min.js`
+
+When updating the bundled file, replace it from a reviewed ALTCHA release, prefer a pinned source URL such as `https://cdn.jsdelivr.net/npm/altcha@<version>/dist/main/altcha.min.js`, and rerun the focused ALTCHA tests afterwards.
+
 ## Release Process
 
 When you're ready to release a new version of cryKeeper, please follow these steps:

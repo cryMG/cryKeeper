@@ -13,6 +13,8 @@
 
 cryKeeper is a lightweight, Python-powered security container designed to protect your web applications from automated bots, scrapers, and credential stuffing. Utilizing nginx's native `auth_request` module, it intercepts malicious traffic before it ever touches your backend.
 
+cryKeeper itself does not implement any own verification logic - it relies on external services like [Cap] (recommended), [ALTCHA] or [hCaptcha] to determine if a request is legitimate.
+
 **Why cryKeeper?**
 
 - **Open Source:** Fully transparent, with no hidden dependencies.
@@ -63,9 +65,9 @@ cryKeeper supports four verification modes. They all use the same stateless cook
 
 | Mode | External dependency | Typical use | Notes |
 | --- | --- | --- | --- |
-| **[Cap](https://trycap.dev/)** | Self-hosted Cap service | Production / privacy-focused setups | Best fit when you want strong protection without relying on third-party CAPTCHA providers. |
-| **[ALTCHA](https://altcha.org/)** | None required (can run fully local) | Production / minimal dependencies | Proof-of-work challenge with server-side cryptographic verification. |
-| **[hCaptcha](https://www.hcaptcha.com/)** | hCaptcha SaaS API | Production with managed provider | Requires site/secret keys and outbound internet access from cryKeeper to hCaptcha endpoints. |
+| **[Cap]** | Self-hosted Cap service | Production / privacy-focused setups | Best fit when you want strong protection without relying on third-party CAPTCHA providers. |
+| **[ALTCHA]** | None required (can run fully local) | Production / minimal dependencies | Proof-of-work challenge with server-side cryptographic verification. |
+| **[hCaptcha]** | hCaptcha SaaS API | Production with managed provider | Requires site/secret keys and outbound internet access from cryKeeper to hCaptcha endpoints. |
 | **Dummy** | None | Local development and wiring tests | No real bot protection. Never use in production. |
 
 Detailed differences:
@@ -219,10 +221,11 @@ In deployments with `[[website]]` overrides, the same endpoint set is also expos
 
 ## Internal Observability
 
-cryKeeper also exposes two fixed internal observability endpoints outside the public `path_prefix` namespace:
+cryKeeper also exposes three fixed internal observability endpoints outside the public `path_prefix` namespace:
 
 - `GET /_crykeeper/metrics`: Prometheus exposition endpoint with counters and histograms for auth checks, challenge renders, explicit unsolved challenge attempts, verify outcomes, rate-limit hits, provider latency, and rate-limit backend fallbacks.
 - `GET /_crykeeper/dashboard`: small server-rendered dashboard built from the same live Prometheus metrics. It shows verify success rates, explicit unsolved challenge attempts, dominant failure reasons, provider latency, skip-route bypass counts, rate-limit hits, backend fallback counts, and runtime warnings for common TLS, proxy, cookie, and auth_request header misconfiguration.
+- `GET /_crykeeper/healthz`: minimal liveness endpoint for container and reverse-proxy health checks. Returns `200 OK` with the body `ok`.
 
 These endpoints are meant for private reverse-proxy exposure only, for example on a dedicated internal hostname or an allowlisted admin vhost. They are intentionally not registered below `path_prefix`, so the normal public challenge routes do not expose them automatically.
 
@@ -272,6 +275,15 @@ cap_secret_key = "your-cap-secret-key"
 domains = ["one.example.com"]
 path_prefix = "/one-check"
 ```
+
+Wildcard domain example:
+
+```toml
+[[website]]
+domains = ["*.example.com"]
+```
+
+Wildcard patterns like `*.example.com` match all subdomains (e.g., `app.example.com`, `api.example.com`) but not the apex domain itself (`example.com`). Wildcard domains are aggregated under a stable `+.example.com` host bucket in metrics and rate-limit keying.
 
 cryKeeper refuses to start while `secret_key` still uses the published placeholder value.
 The example above assumes one trusted nginx hop in a Docker-style private network. If your reverse proxy uses a different source range or multiple hops, adjust `trusted_proxy_hops` and `trusted_proxy_cidrs` accordingly.
@@ -536,4 +548,6 @@ The Docker image also runs a Python-only asset build step that minifies cryKeepe
 - Bundled artifact: file `dist/main/altcha.min.js`
 - Upstream license: MIT
 
-When updating the bundled file, replace it from a reviewed ALTCHA release, prefer a pinned source URL such as `https://cdn.jsdelivr.net/npm/altcha@<version>/dist/main/altcha.min.js`, and rerun the focused ALTCHA tests afterwards.
+[Cap]: https://trycap.dev/
+[ALTCHA]: https://altcha.org/
+[hCaptcha]: https://www.hcaptcha.com/
