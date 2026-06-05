@@ -111,12 +111,26 @@ log_level = "INFO"
 # When true, cryKeeper logs anonymized client IP network prefixes instead of
 # full client IP addresses in its own application logs.
 #
-# IPv4 addresses are reduced to /24 and IPv6 addresses to /48. This affects
+# IPv4 addresses are reduced to the prefix length specified by
+# anonymize_ipv4_prefix_length (default /24) and IPv6 addresses to the prefix
+# length specified by anonymize_ipv6_prefix_length (default /48). This affects
 # only cryKeeper log records. Cookie binding, bypass_ips, rate limiting, and
 # provider verification continue using the full sanitized client IP in-memory
 # when required, and the signed cookie stores only an HMAC digest of the
 # binding.
 anonymize_client_ip_logs = true
+
+# IPv4 prefix length used for IP anonymization in logs.
+#
+# Must be between 0 and 32. Default is 24, which reduces IPv4 addresses to
+# their /24 subnet (e.g., 192.0.2.123 becomes 192.0.2.0/24).
+anonymize_ipv4_prefix_length = 24
+
+# IPv6 prefix length used for IP anonymization in logs.
+#
+# Must be between 0 and 128. Default is 48, which reduces IPv6 addresses to
+# their /48 subnet (e.g., 2001:db8::1234 becomes 2001:db8::/48).
+anonymize_ipv6_prefix_length = 48
 
 # Verification backend used by the challenge flow.
 #

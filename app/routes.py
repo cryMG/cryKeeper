@@ -804,7 +804,12 @@ def _anonymized_log_ip(value: str) -> str:
   except ValueError:
     return value
 
-  prefix_length = 24 if parsed_ip.version == 4 else 48
+  settings = _settings()
+  prefix_length = (
+    settings.anonymize_ipv4_prefix_length
+    if parsed_ip.version == 4
+    else settings.anonymize_ipv6_prefix_length
+  )
   return ip_network(f"{parsed_ip.compressed}/{prefix_length}", strict=False).compressed
 
 

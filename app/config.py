@@ -48,6 +48,8 @@ CONFIGURABLE_ENV_SUFFIXES = (
   "TRUSTED_PROXY_CIDRS",
   "LOG_LEVEL",
   "ANONYMIZE_CLIENT_IP_LOGS",
+  "ANONYMIZE_IPV4_PREFIX_LENGTH",
+  "ANONYMIZE_IPV6_PREFIX_LENGTH",
   "VERIFICATION_MODE",
   "CAP_PUBLIC_BASE_URL",
   "CAP_INTERNAL_BASE_URL",
@@ -91,6 +93,8 @@ NON_WEBSITE_OVERRIDE_SUFFIXES = (
   "TRUSTED_PROXY_CIDRS",
   "LOG_LEVEL",
   "ANONYMIZE_CLIENT_IP_LOGS",
+  "ANONYMIZE_IPV4_PREFIX_LENGTH",
+  "ANONYMIZE_IPV6_PREFIX_LENGTH",
   "RATE_LIMIT_BACKEND",
   "RATE_LIMIT_VALKEY_URL",
   "RATE_LIMIT_VALKEY_PREFIX",
@@ -480,6 +484,28 @@ def _read_non_negative_int(config_source: ConfigSource, name: str, default: int)
   return value
 
 
+def _read_ipv4_prefix_length(
+  config_source: ConfigSource, name: str, default: int
+) -> int:
+  """Read IPv4 prefix length with validation (0-32)."""
+  option_name = config_option_label(name)
+  value = _read_int(config_source, name, default)
+  if value < 0 or value > 32:
+    raise RuntimeError(f"{option_name} must be between 0 and 32.")
+  return value
+
+
+def _read_ipv6_prefix_length(
+  config_source: ConfigSource, name: str, default: int
+) -> int:
+  """Read IPv6 prefix length with validation (0-128)."""
+  option_name = config_option_label(name)
+  value = _read_int(config_source, name, default)
+  if value < 0 or value > 128:
+    raise RuntimeError(f"{option_name} must be between 0 and 128.")
+  return value
+
+
 def _read_csv_values(config_source: ConfigSource, name: str) -> tuple[str, ...]:
   """Read comma-separated string lists while ignoring empty segments."""
   option_name = config_option_label(name)
@@ -837,6 +863,8 @@ class Settings:
   trusted_proxy_cidrs: tuple[str, ...]
   log_level: str
   anonymize_client_ip_logs: bool
+  anonymize_ipv4_prefix_length: int
+  anonymize_ipv6_prefix_length: int
   verification_mode: str
   cap_public_base_url: str
   cap_internal_base_url: str
@@ -1108,6 +1136,16 @@ def _load_settings_from_values(values: Mapping[str, Any]) -> Settings:
       config_source,
       _env_name("ANONYMIZE_CLIENT_IP_LOGS"),
       True,
+    ),
+    anonymize_ipv4_prefix_length=_read_ipv4_prefix_length(
+      config_source,
+      _env_name("ANONYMIZE_IPV4_PREFIX_LENGTH"),
+      24,
+    ),
+    anonymize_ipv6_prefix_length=_read_ipv6_prefix_length(
+      config_source,
+      _env_name("ANONYMIZE_IPV6_PREFIX_LENGTH"),
+      48,
     ),
     verification_mode=_read_text(
       config_source,

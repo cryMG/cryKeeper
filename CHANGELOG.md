@@ -12,6 +12,10 @@ Released versions should use the Git tag as the section title, for example
 
 ## [Unreleased]
 
+### Added
+
+- IP anonymization prefix lengths are now configurable.
+
 ### Changed
 
 - Updated dashboard to show "Check statistics" instead of "Verify outcomes" with better organized information.

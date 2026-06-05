@@ -18,7 +18,12 @@ def _anonymized_access_log_ip(value: str) -> str:
     # don't anonymize loopback addresses, since they don't represent real clients
     return parsed_ip.compressed
 
-  prefix_length = 24 if parsed_ip.version == 4 else 48
+  settings = SETTINGS_BUNDLE.default_settings
+  prefix_length = (
+    settings.anonymize_ipv4_prefix_length
+    if parsed_ip.version == 4
+    else settings.anonymize_ipv6_prefix_length
+  )
   return ip_network(f"{parsed_ip.compressed}/{prefix_length}", strict=False).compressed
 
 
