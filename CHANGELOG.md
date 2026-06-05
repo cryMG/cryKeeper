@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 Released versions should use the Git tag as the section title, for example
 `## [v1.2.3] - 2026-05-28`.
 -->
+<!-- markdownlint-configure-file { "MD024": { "siblings_only": true } } -->
 
 ## [Unreleased]
 
