@@ -2,6 +2,10 @@
 
 This repository is a minimal Flask-based human cryKeeper that sits in front of nginx via `auth_request`.
 
+## Environment
+
+For any python related commands you MUST use the virtual environment that is created in the `.venv` directory. `source .venv/bin/activate`
+
 ## Core architecture
 
 - Keep the cryKeeper stateless. Human verification is represented by an HMAC-signed cookie from `app/cookies.py`; do not introduce server-side session storage unless explicitly requested.
