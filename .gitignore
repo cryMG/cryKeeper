@@ -7,3 +7,6 @@ app/static-dist/
 build/
 nginx/certs/*
 !nginx/certs/.gitkeep
+.coverage
+coverage.xml
+htmlcov/

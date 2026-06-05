@@ -2,10 +2,11 @@
 
 **The open-source human verification service for nginx making bots cry.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?style=flat-square&logo=docker&logoColor=white)](https://github.com/cryMG/cryKeeper/pkgs/container/crykeeper)
-![GDPR-Friendly](https://img.shields.io/badge/GDPR-friendly-blue?style=flat-square&logo=europeanunion&logoColor=white)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cryMG/cryKeeper/tests.yml?branch=main&style=flat-square&label=tests&color=success)](https://github.com/cryMG/cryKeeper/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker&logoColor=white)](https://github.com/cryMG/cryKeeper/pkgs/container/crykeeper)
+![GDPR-Friendly](https://img.shields.io/badge/GDPR-friendly-blue?logo=europeanunion&logoColor=white)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cryMG/cryKeeper/tests.yml?branch=main&label=tests&color=success)](https://github.com/cryMG/cryKeeper/actions)
+[![codecov](https://codecov.io/gh/cryMG/cryKeeper/branch/main/graph/badge.svg)](https://codecov.io/gh/cryMG/cryKeeper)
 
 > [!NOTE]
 > **cryKepper** is currently in early development.  

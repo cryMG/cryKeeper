@@ -59,6 +59,26 @@ Run a single test module:
 python -m unittest discover -s tests -p "test_security_hardening.py" -v
 ```
 
+## Code Coverage
+
+The project uses coverage.py to measure code coverage. Coverage reports are automatically generated during CI and uploaded to Codecov.
+
+Run tests with coverage locally:
+
+```bash
+coverage run -m unittest discover -s tests -v
+coverage report
+```
+
+Generate coverage reports:
+
+```bash
+coverage xml    # XML report for CI tools
+coverage html   # HTML report for local viewing (opens in htmlcov/index.html)
+```
+
+Coverage configuration is in [`.coveragerc`](.coveragerc). The CI workflow in [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs coverage and uploads reports to Codecov for pull request comments and coverage tracking.
+
 ## Local Ruff and Bandit
 
 Ruff and Bandit are used for linting and security checks, respectively.
