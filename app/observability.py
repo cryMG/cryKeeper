@@ -537,14 +537,12 @@ def _verify_rows(samples: dict[str, list[object]]) -> list[dict[str, str]]:
       {
         "host": host,
         "provider": provider,
+        "checks_allow_rate": _format_rate(checks_allowed, check_requests),
+        "checks_requested_allowed": f"{_format_integer(check_requests)} / {_format_integer(checks_allowed)}",
+        "challenges_required_rendered": f"{_format_integer(checks_challenge_required)} / {_format_integer(rendered_challenges)}",
         "success_rate": _format_rate(row["success"], row["total"]),
-        "successful": _format_integer(row["success"]),
-        "total": _format_integer(row["total"]),
+        "challenges_total_successful": f"{_format_integer(row['total'])} / {_format_integer(row['success'])}",
         "failures": failure_detail,
-        "check_requests": _format_integer(check_requests),
-        "checks_allowed": _format_integer(checks_allowed),
-        "checks_challenge_required": _format_integer(checks_challenge_required),
-        "rendered_challenges": _format_integer(rendered_challenges),
         "rate_limit_hits": _format_integer(rate_limit_hits),
       }
     )

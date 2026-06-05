@@ -117,7 +117,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       "Requests bypassed by configured skip_routes since startup.", dashboard_body
     )
     self.assertNotIn('http-equiv="refresh"', dashboard_body)
-    self.assertIn("Verify outcomes", dashboard_body)
+    self.assertIn("Check statistics", dashboard_body)
     self.assertIn("Rate limits", dashboard_body)
     self.assertIn("Runtime warnings", dashboard_body)
     self.assertIn("Trusted proxy hops are disabled", dashboard_body)

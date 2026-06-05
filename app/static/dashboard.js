@@ -231,16 +231,14 @@
         );
 
         return {
-          failures,
           host: row.host,
           provider: row.provider,
+          checks_allow_rate: formatRate(checksAllowed, checkRequests),
+          checks_requested_allowed: `${formatInteger(checkRequests)} / ${formatInteger(checksAllowed)}`,
+          challenges_required_rendered: `${formatInteger(checksChallengeRequired)} / ${formatInteger(renderedChallenges)}`,
           success_rate: formatRate(row.success, row.total),
-          successful: formatInteger(row.success),
-          total: formatInteger(row.total),
-          check_requests: formatInteger(checkRequests),
-          checks_allowed: formatInteger(checksAllowed),
-          checks_challenge_required: formatInteger(checksChallengeRequired),
-          rendered_challenges: formatInteger(renderedChallenges),
+          challenges_total_successful: `${formatInteger(row.total)} / ${formatInteger(row.success)}`,
+          failures,
           rate_limit_hits: formatInteger(rateLimitHits),
         };
       })
@@ -545,14 +543,12 @@
       [
         { heading: "Host", render: (row) => escapeHtml(row.host) },
         { heading: "Provider", render: (row) => escapeHtml(row.provider) },
-        { heading: "Success rate", render: (row) => escapeHtml(row.success_rate) },
-        { heading: "Successful", render: (row) => escapeHtml(row.successful) },
-        { heading: "Total", render: (row) => escapeHtml(row.total) },
-        { heading: "Failures", render: (row) => escapeHtml(row.failures) },
-        { heading: "Check requests", render: (row) => escapeHtml(row.check_requests) },
-        { heading: "Checks allowed", render: (row) => escapeHtml(row.checks_allowed) },
-        { heading: "Checks challenge required", render: (row) => escapeHtml(row.checks_challenge_required) },
-        { heading: "Rendered challenges", render: (row) => escapeHtml(row.rendered_challenges) },
+        { heading: "Checks allow rate", render: (row) => escapeHtml(row.checks_allow_rate) },
+        { heading: "Checks requested/allowed", render: (row) => escapeHtml(row.checks_requested_allowed) },
+        { heading: "Challenges required/rendered", render: (row) => escapeHtml(row.challenges_required_rendered) },
+        { heading: "Challenges success rate", render: (row) => escapeHtml(row.success_rate) },
+        { heading: "Challenges total/successful", render: (row) => escapeHtml(row.challenges_total_successful) },
+        { heading: "Challenge failures", render: (row) => escapeHtml(row.failures) },
         { heading: "Rate limit hits", render: (row) => escapeHtml(row.rate_limit_hits) },
       ],
       rows,

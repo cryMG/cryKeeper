@@ -57,8 +57,8 @@
         <article class="panel">
           <div class="panel-header">
             <div>
-              <h2>Verify outcomes</h2>
-              <p>Success ratio and dominant failure reasons by host and provider.</p>
+              <h2>Check statistics</h2>
+              <p>Checks, success ratio and dominant failure reasons by host and provider.</p>
             </div>
           </div>
           <div class="panel-table" data-section="verify-rows">
@@ -68,14 +68,12 @@
                   <tr>
                     <th>Host</th>
                     <th>Provider</th>
-                    <th>Success rate</th>
-                    <th>Successful</th>
-                    <th>Total</th>
-                    <th>Failures</th>
-                    <th>Check requests</th>
-                    <th>Checks allowed</th>
-                    <th>Checks challenge required</th>
-                    <th>Rendered challenges</th>
+                    <th>Checks allow rate</th>
+                    <th>Checks requested/allowed</th>
+                    <th>Challenges required/rendered</th>
+                    <th>Challenges success rate</th>
+                    <th>Challenges total/successful</th>
+                    <th>Challenge failures</th>
                     <th>Rate limit hits</th>
                   </tr>
                 </thead>
@@ -84,14 +82,12 @@
                     <tr>
                       <td>{{ row.host }}</td>
                       <td>{{ row.provider }}</td>
+                      <td>{{ row.checks_allow_rate }}</td>
+                      <td>{{ row.checks_requested_allowed }}</td>
+                      <td>{{ row.challenges_required_rendered }}</td>
                       <td>{{ row.success_rate }}</td>
-                      <td>{{ row.successful }}</td>
-                      <td>{{ row.total }}</td>
+                      <td>{{ row.challenges_total_successful }}</td>
                       <td>{{ row.failures }}</td>
-                      <td>{{ row.check_requests }}</td>
-                      <td>{{ row.checks_allowed }}</td>
-                      <td>{{ row.checks_challenge_required }}</td>
-                      <td>{{ row.rendered_challenges }}</td>
                       <td>{{ row.rate_limit_hits }}</td>
                     </tr>
                   {% endfor %}
