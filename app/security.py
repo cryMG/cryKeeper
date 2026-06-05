@@ -1,5 +1,8 @@
+import logging
 from posixpath import normpath
 from urllib.parse import unquote, urlsplit
+
+_LOG = logging.getLogger(__name__)
 
 
 def normalize_return_path(
@@ -58,6 +61,8 @@ def _fully_unquote_path(value: str) -> str:
     if unquoted_value == decoded_value:
       break
     decoded_value = unquoted_value
+  else:
+    _LOG.warning("Path could not be fully unquoted after 8 iterations: %s", value)
   return decoded_value
 
 
