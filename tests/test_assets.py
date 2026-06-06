@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.assets import HASHED_ASSET_CACHE_MAX_AGE_SECONDS, load_asset_manifest
+from app.assets import (
+  HASHED_ASSET_CACHE_MAX_AGE_SECONDS,
+  hashed_asset_cache_control,
+  load_asset_manifest,
+)
 from app.observability import observability as observability_blueprint
 from app.routes import crykeeper
 
@@ -207,3 +211,61 @@ path_prefix = "/one-check"
       )
     finally:
       response.close()
+
+
+class AssetManifestErrorHandlingTests(unittest.TestCase):
+  """Unit tests for error handling paths in asset loading."""
+
+  def setUp(self):
+    load_asset_manifest.cache_clear()
+
+  def tearDown(self):
+    load_asset_manifest.cache_clear()
+
+  def test_load_asset_manifest_returns_empty_on_invalid_json(self):
+    """Test that invalid JSON returns empty dict with warning."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      manifest_path = Path(tmpdir) / "asset-manifest.json"
+      manifest_path.write_text("invalid json", encoding="utf-8")
+
+      with patch("app.assets._manifest_path", return_value=manifest_path):
+        load_asset_manifest.cache_clear()
+        manifest = load_asset_manifest()
+        self.assertEqual({}, manifest)
+
+  def test_load_asset_manifest_returns_empty_on_non_dict_payload(self):
+    """Test that non-dict payload returns empty dict with warning."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      manifest_path = Path(tmpdir) / "asset-manifest.json"
+      manifest_path.write_text(json.dumps(["invalid", "array"]), encoding="utf-8")
+
+      with patch("app.assets._manifest_path", return_value=manifest_path):
+        load_asset_manifest.cache_clear()
+        manifest = load_asset_manifest()
+        self.assertEqual({}, manifest)
+
+  def test_load_asset_manifest_filters_non_string_values(self):
+    """Test that non-string values are filtered from manifest."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      manifest_path = Path(tmpdir) / "asset-manifest.json"
+      manifest_data = {
+        "valid.css": "hashed-valid.css",
+        "invalid_key": {"nested": "dict"},
+        "invalid_value": 123,
+      }
+      manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+      with patch("app.assets._manifest_path", return_value=manifest_path):
+        load_asset_manifest.cache_clear()
+        manifest = load_asset_manifest()
+        self.assertEqual({"valid.css": "hashed-valid.css"}, manifest)
+
+  def test_hashed_asset_cache_control_returns_none_for_empty_filename(self):
+    """Test that empty filename returns None."""
+    cache_control = hashed_asset_cache_control("")
+    self.assertIsNone(cache_control)
+
+  def test_hashed_asset_cache_control_returns_none_for_none_filename(self):
+    """Test that None filename returns None."""
+    cache_control = hashed_asset_cache_control(None)
+    self.assertIsNone(cache_control)

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.config import load_settings, load_settings_bundle
+from app.config import load_settings, load_settings_bundle, normalize_host_name
 
 
 class ConfigLoadingTests(unittest.TestCase):
@@ -722,6 +722,161 @@ class ConfigLoadingTests(unittest.TestCase):
         with self.assertRaisesRegex(
           RuntimeError, "reserved for internal observability"
         ):
+          load_settings()
+
+
+class ConfigUtilityTests(unittest.TestCase):
+  def test_normalize_host_name_handles_ipv6_with_multiple_colons(self):
+    """Test that IPv6 addresses with multiple colons are preserved."""
+    # IPv6 address with multiple colons but not in brackets
+    result = normalize_host_name("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
+    self.assertEqual("2001:0db8:85a3:0000:0000:8a2e:0370:7334", result)
+
+  def test_normalize_host_name_handles_ipv6_in_brackets(self):
+    """Test that IPv6 addresses in brackets are normalized."""
+    result = normalize_host_name("[2001:db8::1]")
+    self.assertEqual("2001:db8::1", result)
+
+  def test_normalize_host_name_handles_ipv6_in_brackets_with_port(self):
+    """Test that IPv6 addresses in brackets with port are normalized."""
+    result = normalize_host_name("[2001:db8::1]:443")
+    self.assertEqual("2001:db8::1", result)
+
+  def test_normalize_host_name_strips_port_from_regular_host(self):
+    """Test that ports are stripped from regular host names."""
+    result = normalize_host_name("example.com:443")
+    self.assertEqual("example.com", result)
+
+  def test_normalize_host_name_returns_empty_for_none(self):
+    """Test that None returns empty string."""
+    result = normalize_host_name(None)
+    self.assertEqual("", result)
+
+  def test_normalize_host_name_returns_empty_for_empty(self):
+    """Test that empty string returns empty string."""
+    result = normalize_host_name("")
+    self.assertEqual("", result)
+
+  def test_normalize_host_name_normalizes_case_and_whitespace(self):
+    """Test that host names are lowercased and stripped."""
+    result = normalize_host_name("  Example.COM  ")
+    self.assertEqual("example.com", result)
+
+
+class ConfigErrorHandlingTests(unittest.TestCase):
+  def _write_config(self, directory: str, contents: str) -> str:
+    config_path = Path(directory) / "config.toml"
+    config_path.write_text(textwrap.dedent(contents), encoding="utf-8")
+    return str(config_path)
+
+  def test_config_file_path_must_be_file_not_directory(self):
+    """Test that config path pointing to directory raises error."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      # Use the directory itself as config path
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": temp_dir}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "must point to a readable TOML file"):
+          load_settings()
+
+  def test_config_file_with_invalid_toml_syntax(self):
+    """Test that invalid TOML syntax raises error."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = Path(temp_dir) / "config.toml"
+      config_path.write_text("[invalid", encoding="utf-8")
+
+      with patch.dict(
+        os.environ, {"CRYKEEPER_CONFIG_FILE": str(config_path)}, clear=True
+      ):
+        with self.assertRaisesRegex(RuntimeError, "Failed to parse config file"):
+          load_settings()
+
+  def test_website_tables_must_be_array(self):
+    """Test that [[website]] must be an array."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+        [crykeeper]
+        secret_key = "test-secret"
+
+        [website]
+        domains = ["example.com"]
+        """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "must be an array of tables"):
+          load_settings()
+
+  def test_website_domains_must_be_array(self):
+    """Test that website domains must be an array."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+        [crykeeper]
+        secret_key = "test-secret"
+
+        [[website]]
+        domains = "not-an-array"
+        """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "domains as a non-empty TOML array"):
+          load_settings()
+
+  def test_website_domains_must_be_strings(self):
+    """Test that website domains must be strings."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+        [crykeeper]
+        secret_key = "test-secret"
+
+        [[website]]
+        domains = [123, "example.com"]
+        """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "must contain only strings"):
+          load_settings()
+
+  def test_website_domains_must_not_be_empty(self):
+    """Test that website domains must not be blank."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+        [crykeeper]
+        secret_key = "test-secret"
+
+        [[website]]
+        domains = ["", "example.com"]
+        """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "must not contain blank values"):
+          load_settings()
+
+  def test_website_domains_must_not_contain_paths_or_schemes(self):
+    """Test that website domains must be host names only."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      config_path = self._write_config(
+        temp_dir,
+        """
+        [crykeeper]
+        secret_key = "test-secret"
+
+        [[website]]
+        domains = ["https://example.com/path"]
+        """,
+      )
+
+      with patch.dict(os.environ, {"CRYKEEPER_CONFIG_FILE": config_path}, clear=True):
+        with self.assertRaisesRegex(RuntimeError, "must contain host names only"):
           load_settings()
 
 

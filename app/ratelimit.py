@@ -31,11 +31,12 @@ class RateLimitDecision:
   retry_after_seconds: int | None = None
 
 
-@dataclass(frozen=True)
-class RateLimitBackendFailure:
+class RateLimitBackendFailure(Exception):
   """Structured backend errors used to trigger resilient fallbacks."""
 
-  message: str
+  def __init__(self, message: str):
+    self.message = message
+    super().__init__(message)
 
 
 @dataclass

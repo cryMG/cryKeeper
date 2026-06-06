@@ -17,6 +17,7 @@ Released versions should use the Git tag as the section title, for example
 - IP anonymization prefix lengths are now configurable.
 - Log a warning if a path could not be fully unquoted.
 - Test coverage reports.
+- Added integration tests and more unit tests.
 
 ### Changed
 

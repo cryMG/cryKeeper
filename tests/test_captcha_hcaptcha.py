@@ -51,6 +51,26 @@ class HCaptchaVerificationTests(unittest.TestCase):
     self.assertEqual(5, urlopen.call_args.kwargs["timeout"])
 
   @patch("app.captcha.hcaptcha.request.urlopen")
+  def test_verify_token_returns_retryable_on_timeout(self, urlopen):
+    urlopen.side_effect = TimeoutError("Request timeout")
+
+    result = verify_token(
+      "https://api.hcaptcha.com/siteverify",
+      "secret-key",
+      "site-key",
+      "response-token",
+      "203.0.113.5",
+      5,
+    )
+
+    self.assertFalse(result.success)
+    self.assertTrue(result.retryable)
+    self.assertEqual(
+      "hCaptcha verification is temporarily unavailable.", result.message
+    )
+    self.assertIsNone(result.payload)
+
+  @patch("app.captcha.hcaptcha.request.urlopen")
   def test_verify_token_returns_retryable_on_transport_error(self, urlopen):
     urlopen.side_effect = error.URLError("connection failed")
 
