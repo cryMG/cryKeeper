@@ -17,5 +17,21 @@
     "test_*.py"
   ],
   "python.testing.pytestEnabled": false,
-  "python.testing.unittestEnabled": true
+  "python.testing.unittestEnabled": true,
+  "cSpell.words": [
+    "anonymization",
+    "Bingbot",
+    "crymg",
+    "gunicorn",
+    "hcaptcha",
+    "healthz",
+    "hmac",
+    "linux",
+    "nginx",
+    "prometheus",
+    "pyproject",
+    "SeznamBot",
+    "unhashed",
+    "venv"
+  ]
 }
