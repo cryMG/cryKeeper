@@ -16,5 +16,4 @@ indent-style = "space"
 [tool.bandit]
 exclude_dirs = [
   ".venv",
-  "tests",
 ]

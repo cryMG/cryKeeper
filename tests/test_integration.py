@@ -20,7 +20,7 @@ class IntegrationTests(unittest.TestCase):
   def _write_minimal_config(
     self,
     verification_mode="dummy",
-    secret_key="test-secret-key-integration",
+    secret_key="test-secret-key-integration",  # nosec
     **extra_config,
   ):
     config_lines = [
@@ -437,7 +437,7 @@ class IntegrationTests(unittest.TestCase):
     """Test that ALTCHA mode renders the challenge correctly."""
     self._write_minimal_config(
       verification_mode="altcha",
-      altcha_hmac_secret="test-hmac-secret",
+      altcha_hmac_secret="test-hmac-secret",  # nosec
       altcha_hmac_key_secret="test-hmac-key-secret",
       human_cookie_secure=False,
     )
@@ -453,7 +453,7 @@ class IntegrationTests(unittest.TestCase):
     self._write_minimal_config(
       verification_mode="hcaptcha",
       hcaptcha_site_key="test-site-key",
-      hcaptcha_secret_key="test-secret-key",
+      hcaptcha_secret_key="test-secret-key",  # nosec
       human_cookie_secure=False,
     )
     app = self._create_app()

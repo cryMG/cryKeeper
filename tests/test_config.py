@@ -196,8 +196,8 @@ class ConfigLoadingTests(unittest.TestCase):
         os.environ,
         {
           "CRYKEEPER_CONFIG_FILE": config_path,
-          "CRYKEEPER_SECRET_KEY": "env-secret",
-          "CRYKEEPER_PREVIOUS_SECRET_KEYS": "older-env-secret, old-env-secret, env-secret",
+          "CRYKEEPER_SECRET_KEY": "env-secret",  # nosec
+          "CRYKEEPER_PREVIOUS_SECRET_KEYS": "older-env-secret, old-env-secret, env-secret",  # nosec
           "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
           "CRYKEEPER_ENFORCEMENT_MODE": "enforce",
           "CRYKEEPER_FOOTER_HTML": "from <strong>env</strong>",
@@ -274,7 +274,7 @@ class ConfigLoadingTests(unittest.TestCase):
         os.environ,
         {
           "CRYKEEPER_CONFIG_FILE": config_path,
-          "CRYKEEPER_SECRET_KEY": "",
+          "CRYKEEPER_SECRET_KEY": "",  # nosec
           "CRYKEEPER_HUMAN_COOKIE_SECURE": "   ",
           "CRYKEEPER_FOOTER_HTML": "",
           "CRYKEEPER_SKIP_ROUTES": "  ",
@@ -377,7 +377,7 @@ class ConfigLoadingTests(unittest.TestCase):
         os.environ,
         {
           "CRYKEEPER_CONFIG_FILE": config_path,
-          "CRYKEEPER_SECRET_KEY": "env-secret",
+          "CRYKEEPER_SECRET_KEY": "env-secret",  # nosec
           "CRYKEEPER_HUMAN_COOKIE_SECURE": "true",
           "CRYKEEPER_PATH_PREFIX": "/from-env",
         },

@@ -8,7 +8,7 @@ from app import create_app
 class CryKeeperObservabilityTests(unittest.TestCase):
   def _create_app(self, **env_overrides):
     env = {
-      "CRYKEEPER_SECRET_KEY": "test-secret",
+      "CRYKEEPER_SECRET_KEY": "test-secret",  # nosec
       "CRYKEEPER_VERIFICATION_MODE": "dummy",
       "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
       "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
@@ -188,18 +188,18 @@ class CryKeeperObservabilityTests(unittest.TestCase):
 
   def test_unknown_hosts_collapse_into_default_metric_label(self):
     app = self._create_app(
-      CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",
+      CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",  # nosec
     )
     client = app.test_client()
 
-    with open("/tmp/crykeeper-test-config.toml", "w", encoding="utf-8") as config_file:
+    with open("/tmp/crykeeper-test-config.toml", "w", encoding="utf-8") as config_file:  # nosec
       config_file.write(
         """[crykeeper]\nsecret_key = \"test-secret\"\nverification_mode = \"dummy\"\nhuman_cookie_secure = false\ntrusted_proxy_hops = 0\n\n[[website]]\ndomains = [\"known.example\"]\npath_prefix = \"/crykeeper\"\n"""
       )
 
     try:
       app = self._create_app(
-        CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",
+        CRYKEEPER_CONFIG_FILE="/tmp/crykeeper-test-config.toml",  # nosec
       )
       client = app.test_client()
 
@@ -227,10 +227,10 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       self.assertIn('host="default"', metrics_body)
       self.assertNotIn('host="attacker.example"', metrics_body)
     finally:
-      os.remove("/tmp/crykeeper-test-config.toml")
+      os.remove("/tmp/crykeeper-test-config.toml")  # nosec
 
   def test_wildcard_domains_are_logged_under_plus_bucket(self):
-    config_path = "/tmp/crykeeper-test-config-wildcard.toml"
+    config_path = "/tmp/crykeeper-test-config-wildcard.toml"  # nosec
     with open(config_path, "w", encoding="utf-8") as config_file:
       config_file.write(
         """[crykeeper]\nsecret_key = \"test-secret\"\nverification_mode = \"dummy\"\nhuman_cookie_secure = false\ntrusted_proxy_hops = 0\n\n[[website]]\ndomains = [\"*.example.com\"]\npath_prefix = \"/crykeeper\"\n"""
@@ -268,7 +268,7 @@ class CryKeeperObservabilityTests(unittest.TestCase):
       CRYKEEPER_TRUSTED_PROXY_CIDRS="10.0.0.0/8",
       CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
       CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
     )
 
     dashboard_response = app.test_client().get(

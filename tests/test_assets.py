@@ -25,7 +25,7 @@ class CryKeeperAssetManifestTests(unittest.TestCase):
 
   def _create_app(self, **env_overrides):
     env = {
-      "CRYKEEPER_SECRET_KEY": "test-secret",
+      "CRYKEEPER_SECRET_KEY": "test-secret",  # nosec
       "CRYKEEPER_VERIFICATION_MODE": "dummy",
       "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
       "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",

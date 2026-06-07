@@ -25,7 +25,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       "crykeeper_gunicorn_conf", config_path
     )
     module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None and spec.loader is not None  # nosec
     spec.loader.exec_module(module)
     return module
 
@@ -36,7 +36,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
 
   def _create_app(self, **env_overrides):
     env = {
-      "CRYKEEPER_SECRET_KEY": "test-secret",
+      "CRYKEEPER_SECRET_KEY": "test-secret",  # nosec
       "CRYKEEPER_VERIFICATION_MODE": "dummy",
       "CRYKEEPER_HUMAN_COOKIE_SECURE": "false",
       "CRYKEEPER_TRUSTED_PROXY_HOPS": "0",
@@ -53,14 +53,14 @@ class CryKeeperHardeningTests(unittest.TestCase):
         CRYKEEPER_HUMAN_COOKIE_SECURE="false",
         CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
         CRYKEEPER_CAP_SITE_KEY="site-key",
-        CRYKEEPER_CAP_SECRET_KEY="secret-key",
+        CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
       )
 
   def test_create_app_rejects_default_secret_key(self):
     with patch.dict(
       os.environ,
       {
-        "CRYKEEPER_SECRET_KEY": "change-me-in-production",
+        "CRYKEEPER_SECRET_KEY": "change-me-in-production",  # nosec
         "CRYKEEPER_VERIFICATION_MODE": "dummy",
       },
       clear=True,
@@ -72,7 +72,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     with patch.dict(
       os.environ,
       {
-        "CRYKEEPER_SECRET_KEY": "test-secret",
+        "CRYKEEPER_SECRET_KEY": "test-secret",  # nosec
         "CRYKEEPER_VERIFICATION_MODE": "dummy",
         "CRYKEEPER_TRUSTED_PROXY_HOPS": "1",
       },
@@ -85,7 +85,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     with patch.dict(
       os.environ,
       {
-        "CRYKEEPER_SECRET_KEY": "test-secret",
+        "CRYKEEPER_SECRET_KEY": "test-secret",  # nosec
         "CRYKEEPER_VERIFICATION_MODE": "dummy",
         "CRYKEEPER_ENFORCEMENT_MODE": "maybe",
       },
@@ -103,7 +103,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
         CRYKEEPER_CAP_PUBLIC_BASE_URL="http://localhost:3000",
         CRYKEEPER_CAP_ASSET_BASE_URL="http://localhost:3000",
         CRYKEEPER_CAP_SITE_KEY="site-key",
-        CRYKEEPER_CAP_SECRET_KEY="secret-key",
+        CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
       )
 
     local_response = app.test_client().get(
@@ -770,7 +770,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
       CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -797,7 +797,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
       CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -833,7 +833,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
       CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -857,7 +857,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_CAP_PUBLIC_BASE_URL="https://cap.example.com",
       CRYKEEPER_CAP_ASSET_BASE_URL="https://cap.example.com",
       CRYKEEPER_CAP_SITE_KEY="site-key",
-      CRYKEEPER_CAP_SECRET_KEY="secret-key",
+      CRYKEEPER_CAP_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().get(
       "/crykeeper/challenge",
@@ -897,7 +897,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_VERIFICATION_MODE="hcaptcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().get(
       "/crykeeper/challenge",
@@ -919,7 +919,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="altcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
-      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",  # nosec
     )
     response = app.test_client().get(
       "/crykeeper/challenge",
@@ -949,7 +949,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_VERIFICATION_MODE="hcaptcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -978,7 +978,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_VERIFICATION_MODE="hcaptcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -1004,7 +1004,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_VERIFICATION_MODE="hcaptcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",  # nosec
     )
     response = app.test_client().post(
       "/crykeeper/verify",
@@ -1033,7 +1033,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
       CRYKEEPER_VERIFICATION_MODE="hcaptcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
       CRYKEEPER_HCAPTCHA_SITE_KEY="site-key",
-      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",
+      CRYKEEPER_HCAPTCHA_SECRET_KEY="secret-key",  # nosec
     )
     client = app.test_client()
 
@@ -1069,7 +1069,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="altcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
-      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",  # nosec
     )
     response = app.test_client().get(
       "/crykeeper/altcha/challenge",
@@ -1084,7 +1084,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="altcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
-      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",  # nosec
       CRYKEEPER_ALTCHA_CHALLENGE_COST="10",
     )
     client = app.test_client()
@@ -1151,7 +1151,7 @@ class CryKeeperHardeningTests(unittest.TestCase):
     app = self._create_app(
       CRYKEEPER_VERIFICATION_MODE="altcha",
       CRYKEEPER_HUMAN_COOKIE_SECURE="true",
-      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",
+      CRYKEEPER_ALTCHA_HMAC_SECRET="altcha-secret",  # nosec
     )
     response = app.test_client().get(
       "/crykeeper/static/vendor/altcha.min.js",
