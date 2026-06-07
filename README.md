@@ -428,13 +428,26 @@ If you override `path_prefix`, the healthcheck path changes with it.
 
 cryKeeper selects the UI language from the browser's `Accept-Language` header.
 
-To adjust existing languages:
+**Available languages:**
 
-- Edit the JSON files in [app/i18n](app/i18n)
-- Keep [app/i18n/en.json](app/i18n/en.json) complete, because English is the required fallback catalog
-- Additional language files may be partial; missing keys fall back to English
-
-To add a new language, add a new JSON file such as `fr.json` with translated keys.
+| Code | Language | Status |
+| ---- | -------- | ------ |
+| en | English | Complete - Fallback catalog |
+| de | German | Complete |
+| es | Spanish | Auto-translated |
+| fr | French | Auto-translated |
+| hi | Hindi | Auto-translated |
+| it | Italian | Auto-translated |
+| ja | Japanese | Auto-translated |
+| ko | Korean | Auto-translated |
+| nl | Dutch | Auto-translated |
+| pl | Polish | Auto-translated |
+| pt | Portuguese | Auto-translated |
+| ru | Russian | Auto-translated |
+| sv | Swedish | Auto-translated |
+| uk | Ukrainian | Auto-translated |
+| zh-CN | Simplified Chinese | Auto-translated |
+| zh-TW | Traditional Chinese | Auto-translated |
 
 If you run cryKeeper in Docker, you can also mount custom translation files into `/app/app/i18n/`, for example:
 
@@ -442,7 +455,7 @@ If you run cryKeeper in Docker, you can also mount custom translation files into
 services:
   crykeeper:
     volumes:
-      - ./translations/fr.json:/app/app/i18n/fr.json:ro
+      - ./translations/de-at.json:/app/app/i18n/de-at.json:ro
 ```
 
 Translation catalogs are discovered at startup, so restart the container after adding or changing language files.

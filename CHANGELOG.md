@@ -18,6 +18,7 @@ Released versions should use the Git tag as the section title, for example
 - Log a warning if a path could not be fully unquoted.
 - Test coverage reports.
 - Added integration tests and more unit tests.
+- Translations for es, fr, hi, it, ja, ko, nl, pl, pt, ru, sv, uk, zh-CN, zh-TW (auto-translated)
 
 ### Changed
 

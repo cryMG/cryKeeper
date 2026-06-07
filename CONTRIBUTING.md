@@ -104,7 +104,17 @@ For development, these files are the most important entry points:
 - [config.example.toml](config.example.toml): reference configuration
 - [nginx/nginx.demo.conf](nginx/nginx.demo.conf): working nginx auth_request example used by the demo stack
 
-## Gnuicorn Hints
+## i18n
+
+To adjust existing languages:
+
+- Edit the JSON files in [app/i18n](app/i18n)
+- Keep [app/i18n/en.json](app/i18n/en.json) complete, because English is the required fallback catalog
+- Additional language files should be complete but missing keys fall back to English
+
+To add a new language, add a new JSON file such as `fr.json` with translated keys.
+
+## Gunicorn Hints
 
 The Gunicorn access-log redaction happens in [gunicorn.conf.py](gunicorn.conf.py), where a custom logger class rewrites the logged remote address based on the shared `anonymize_client_ip_logs` setting.
 
